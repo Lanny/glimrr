@@ -119,6 +119,8 @@ func NewModel() Model {
     panic(err)
   }
 
+  TestFormat(string(bcontents))
+
   model := Model{
     diff: df,
     lineNoColWidth: GetLineNoColWidth(df),
@@ -130,6 +132,7 @@ func NewModel() Model {
 func main() {
   model := NewModel()
   p := tea.NewProgram(model)
+  os.Exit(0)
 
   model.Init()
   if err := p.Start(); err != nil {

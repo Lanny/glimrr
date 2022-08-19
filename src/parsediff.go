@@ -70,7 +70,6 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
         baseStart: aLine,
       }
 
-
     case strings.HasPrefix(line, "+"):
       line := DiffLine {
         text: line[1:],
