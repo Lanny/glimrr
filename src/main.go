@@ -114,12 +114,12 @@ func NewModel() Model {
     panic(err)
   }
 
-  df, err := AnnotateWithDiff(string(bcontents), string(dcontents))
+  df, err := FormatFile(string(bcontents), string(dcontents), "javascript")
   if err != nil {
     panic(err)
   }
 
-  TestFormat(string(bcontents))
+  //TestFormat(string(bcontents))
 
   model := Model{
     diff: df,
@@ -132,7 +132,6 @@ func NewModel() Model {
 func main() {
   model := NewModel()
   p := tea.NewProgram(model)
-  os.Exit(0)
 
   model.Init()
   if err := p.Start(); err != nil {
