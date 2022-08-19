@@ -4,12 +4,13 @@ import (
   "fmt"
   "os"
   "strings"
+//  "github.com/alecthomas/chroma"
   gloss "github.com/charmbracelet/lipgloss"
   tea "github.com/charmbracelet/bubbletea"
 )
 
-type model struct {
-  lines []string
+type Model struct {
+  diff *DiffFile
   cursor int
   w int
   h int
@@ -17,13 +18,13 @@ type model struct {
   y int
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
   return nil
 }
 
 var cursorStyle = gloss.NewStyle().Background(gloss.Color("#AAAAAA"))
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   switch msg := msg.(type) {
   case tea.WindowSizeMsg:
     m.w = msg.Width
@@ -46,7 +47,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
       // The "down" and "j" keys move the cursor down
       case "down", "j":
-        if m.cursor < len(m.lines)-1 {
+        if m.cursor < len(m.diff.lines)-1 {
           m.cursor++
 
           if m.cursor >= m.y + m.h {
@@ -66,40 +67,54 @@ func Min(x, y int) int {
   return x
 }
 
-func (m model) View() string {
+func (m Model) View() string {
   view := make([]string, m.h)
 
   for i := 0; i < m.h; i++ {
     sourceIdx := m.y + i
 
     if sourceIdx == m.cursor {
-      view[i] = cursorStyle.Width(m.w).Render(m.lines[sourceIdx])
+      view[i] = cursorStyle.Width(m.w).Render(m.diff.lines[sourceIdx].text)
     } else {
-      view[i] = m.lines[sourceIdx]
+      view[i] = m.diff.lines[sourceIdx].text
     }
   }
 
   return strings.Join(view, "\n")
 }
 
-func main() {
-  contents, err := os.ReadFile("/Users/ryan.jenkins/buyer-portal/package.json")
+func NewModel() Model {
+  dcontents, err := os.ReadFile("./test-data/taxDoc.diff")
   if err != nil {
     panic(err)
   }
 
-  lines := strings.Split(string(contents), "\n")
-
-  my_model := model{
-    lines: lines,
-    cursor: 60,
-    x: 0,
-    y: 2,
-    w: 80,
-    h: 24,
+  bcontents, err := os.ReadFile("./test-data/taxDoc.js")
+  if err != nil {
+    panic(err)
   }
 
-  p := tea.NewProgram(my_model)
+  df, err := AnnotateWithDiff(string(bcontents), string(dcontents))
+  if err != nil {
+    panic(err)
+  }
+
+  model := Model{
+    cursor: 0,
+    x: 0,
+    y: 0,
+    w: 80,
+    h: 24,
+    diff: df,
+  }
+
+  return model
+}
+
+func main() {
+  model := NewModel()
+  p := tea.NewProgram(model)
+
   if err := p.Start(); err != nil {
     fmt.Printf("Alas, there's been an error: %v", err)
     os.Exit(1)
