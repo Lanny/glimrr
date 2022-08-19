@@ -16,6 +16,7 @@ type Model struct {
   h int
   x int
   y int
+  lineNoColWidth int
 }
 
 func (m Model) Init() tea.Cmd {
@@ -60,23 +61,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   return m, nil
 }
 
-func Min(x, y int) int {
-  if x > y {
-    return y
-  }
-  return x
-}
 
 func (m Model) View() string {
+  var lineContent string
   view := make([]string, m.h)
 
   for i := 0; i < m.h; i++ {
     sourceIdx := m.y + i
+    line := m.diff.lines[sourceIdx]
+
+    if line.mode == UNCHANGED {
+      lineContent = fmt.Sprintf(
+        "  %*d %*d %s",
+        m.lineNoColWidth, line.aNum,
+        m.lineNoColWidth, line.bNum,
+        line.text,
+      )
+    } else if line.mode == ADDED {
+      lineContent = fmt.Sprintf(
+        "+ %*s %*d %s",
+        m.lineNoColWidth, "",
+        m.lineNoColWidth, line.bNum,
+        line.text,
+      )
+    } else {
+      lineContent = fmt.Sprintf(
+        "- %*d %*s %s",
+        m.lineNoColWidth, line.aNum,
+        m.lineNoColWidth, "",
+        line.text,
+      )
+    }
 
     if sourceIdx == m.cursor {
-      view[i] = cursorStyle.Width(m.w).Render(m.diff.lines[sourceIdx].text)
+      view[i] = cursorStyle.Width(m.w).Render(lineContent)
     } else {
-      view[i] = m.diff.lines[sourceIdx].text
+      view[i] = lineContent
     }
   }
 
@@ -100,12 +120,8 @@ func NewModel() Model {
   }
 
   model := Model{
-    cursor: 0,
-    x: 0,
-    y: 0,
-    w: 80,
-    h: 24,
     diff: df,
+    lineNoColWidth: GetLineNoColWidth(df),
   }
 
   return model
@@ -115,6 +131,7 @@ func main() {
   model := NewModel()
   p := tea.NewProgram(model)
 
+  model.Init()
   if err := p.Start(); err != nil {
     fmt.Printf("Alas, there's been an error: %v", err)
     os.Exit(1)

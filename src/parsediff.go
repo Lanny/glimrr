@@ -83,7 +83,7 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
     case strings.HasPrefix(line, "-"):
       line := DiffLine {
         text: line[1:],
-        mode: ADDED,
+        mode: REMOVED,
         aNum: aLine,
         bNum: bLine,
       }
