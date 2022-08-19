@@ -9,6 +9,11 @@ import (
   gloss "github.com/charmbracelet/lipgloss"
 )
 
+type UnRenderedToken struct {
+  text string
+  style gloss.Style
+}
+
 func ReconstituteDiff(df *DiffFile) (string, string) {
   var aBuilder strings.Builder
   var bBuilder strings.Builder
@@ -31,8 +36,8 @@ func ReconstituteDiff(df *DiffFile) (string, string) {
   return aBuilder.String(), bBuilder.String()
 }
 
-func Highlight(s string, fType string) ([]string, error) {
-  var outLines []string
+func Highlight(s string, fType string) ([][]UnRenderedToken, error) {
+  var ret [][]UnRenderedToken
 
   lexer := chroma.Coalesce(lexers.Get("javascript"))
   style := styles.Get("monokai")
@@ -45,18 +50,20 @@ func Highlight(s string, fType string) ([]string, error) {
   lines := chroma.SplitTokensIntoLines(rawTokens)
 
   for _, line := range lines {
-    builder := strings.Builder{}
+    var unRenderedTokens []UnRenderedToken
 
     for _, token := range line {
       s := style.Get(token.Type)
-      gStyle := gloss.NewStyle().Foreground(gloss.Color(fmt.Sprintf("#%X", int32(s.Colour))))
-      builder.WriteString(gStyle.Render(token.Value))
+      unRenderedTokens = append(unRenderedTokens, UnRenderedToken{
+        style: gloss.NewStyle().Foreground(gloss.Color(fmt.Sprintf("#%X", int32(s.Colour)))),
+        text: strings.ReplaceAll(token.Value, "\n", ""),
+      })
     }
 
-    outLines = append(outLines, strings.ReplaceAll(builder.String(), "\n", ""))
+    ret = append(ret, unRenderedTokens)
   }
 
-  return outLines, nil
+  return ret, nil
 }
 
 func FormatFile(base string, diff string, fType string) (*DiffFile, error) {
@@ -81,12 +88,23 @@ func FormatFile(base string, diff string, fType string) (*DiffFile, error) {
 
   for _, line := range df.lines {
     deRefLine := *line
-    if line.mode == UNCHANGED || line.mode == REMOVED {
-      deRefLine.text = baseFormatted[line.aNum - 1]
+    var builder strings.Builder
+
+    if line.mode == UNCHANGED {
+      for _, token := range baseFormatted[line.aNum - 1] {
+        builder.WriteString(token.style.Faint(true).Render(token.text))
+      }
+    } else if line.mode == REMOVED {
+      for _, token := range baseFormatted[line.aNum - 1] {
+        builder.WriteString(token.style.Render(token.text))
+      }
     } else {
-      deRefLine.text = targFormatted[line.bNum - 1]
+      for _, token := range baseFormatted[line.bNum - 1] {
+        builder.WriteString(token.style.Render(token.text))
+      }
     }
 
+    deRefLine.text = builder.String()
     formattedDiff.lines = append(formattedDiff.lines, &deRefLine)
     //fmt.Printf("%s\n", deRefLine.text)
   }
