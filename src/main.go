@@ -61,6 +61,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   return m, nil
 }
 
+var bgColorMap = [...]string{
+  "#000",
+  "#040",
+  "#400",
+  "#000",
+  "#444",
+  "#474",
+  "#744",
+}
+
 
 func (m Model) View() string {
   view := make([]string, m.h)
@@ -70,24 +80,20 @@ func (m Model) View() string {
     line := m.ff.lines[sourceIdx]
     isCursor := sourceIdx == m.cursor
     view[i] = m.renderLine(line, isCursor)
-    /*
-    if sourceIdx == m.cursor {
-      view[i] = cursorStyle.Width(m.w).Render(lineContent)
-    } else {
-      view[i] = lineContent
-    }
-    */
   }
 
   return strings.Join(view, "\n")
 }
 
 func (m Model) renderLine(line *FormattedLine, cursor bool) string {
-  var background gloss.Color
   var lineContent string
+  bgIdx := line.mode
+  if cursor {
+    bgIdx = bgIdx | 4
+  }
+  background := gloss.Color(bgColorMap[bgIdx])
 
   if line.mode == UNCHANGED {
-    background = gloss.Color("#000")
     lineContent = fmt.Sprintf(
       "%*d %*d  %s",
       m.lineNoColWidth, line.aNum,
@@ -95,7 +101,6 @@ func (m Model) renderLine(line *FormattedLine, cursor bool) string {
       line.Render(background),
     )
   } else if line.mode == ADDED {
-    background = gloss.Color("#050")
     lineContent = fmt.Sprintf(
       "%*s %*d +%s",
       m.lineNoColWidth, "",
@@ -103,7 +108,6 @@ func (m Model) renderLine(line *FormattedLine, cursor bool) string {
       line.Render(background),
     )
   } else {
-    background = gloss.Color("#500")
     lineContent = fmt.Sprintf(
       "%*d %*s -%s",
       m.lineNoColWidth, line.aNum,
