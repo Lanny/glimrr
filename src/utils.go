@@ -18,13 +18,13 @@ func Max(x, y int) int {
   return y
 }
 
-func GetLineNoColWidth(diffFile *DiffFile) int {
-  count := len(diffFile.lines)
+func GetLineNoColWidth(ff *FormattedFile) int {
+  count := len(ff.lines)
   if count < 1 {
     return 1
   }
 
-  lastLine := diffFile.lines[count - 1]
+  lastLine := ff.lines[count - 1]
   maxLineNo := Max(lastLine.aNum, lastLine.bNum)
   return int(math.Log10(float64(maxLineNo)) + 1.0)
 }

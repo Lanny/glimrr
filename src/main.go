@@ -10,12 +10,12 @@ import (
 )
 
 type Model struct {
-  diff *DiffFile
+  ff     *FormattedFile
   cursor int
-  w int
-  h int
-  x int
-  y int
+  w      int
+  h      int
+  x      int
+  y      int
   lineNoColWidth int
 }
 
@@ -48,7 +48,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
       // The "down" and "j" keys move the cursor down
       case "down", "j":
-        if m.cursor < len(m.diff.lines)-1 {
+        if m.cursor < len(m.ff.lines)-1 {
           m.cursor++
 
           if m.cursor >= m.y + m.h {
@@ -63,44 +63,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 
 func (m Model) View() string {
-  var lineContent string
   view := make([]string, m.h)
 
   for i := 0; i < m.h; i++ {
     sourceIdx := m.y + i
-    line := m.diff.lines[sourceIdx]
-
-    if line.mode == UNCHANGED {
-      lineContent = fmt.Sprintf(
-        "  %*d %*d %s",
-        m.lineNoColWidth, line.aNum,
-        m.lineNoColWidth, line.bNum,
-        line.text,
-      )
-    } else if line.mode == ADDED {
-      lineContent = fmt.Sprintf(
-        "+ %*s %*d %s",
-        m.lineNoColWidth, "",
-        m.lineNoColWidth, line.bNum,
-        line.text,
-      )
-    } else {
-      lineContent = fmt.Sprintf(
-        "- %*d %*s %s",
-        m.lineNoColWidth, line.aNum,
-        m.lineNoColWidth, "",
-        line.text,
-      )
-    }
-
+    line := m.ff.lines[sourceIdx]
+    isCursor := sourceIdx == m.cursor
+    view[i] = m.renderLine(line, isCursor)
+    /*
     if sourceIdx == m.cursor {
       view[i] = cursorStyle.Width(m.w).Render(lineContent)
     } else {
       view[i] = lineContent
     }
+    */
   }
 
   return strings.Join(view, "\n")
+}
+
+func (m Model) renderLine(line *FormattedLine, cursor bool) string {
+  var background gloss.Color
+  var lineContent string
+
+  if line.mode == UNCHANGED {
+    background = gloss.Color("#000")
+    lineContent = fmt.Sprintf(
+      "%*d %*d  %s",
+      m.lineNoColWidth, line.aNum,
+      m.lineNoColWidth, line.bNum,
+      line.Render(background),
+    )
+  } else if line.mode == ADDED {
+    background = gloss.Color("#050")
+    lineContent = fmt.Sprintf(
+      "%*s %*d +%s",
+      m.lineNoColWidth, "",
+      m.lineNoColWidth, line.bNum,
+      line.Render(background),
+    )
+  } else {
+    background = gloss.Color("#500")
+    lineContent = fmt.Sprintf(
+      "%*d %*s -%s",
+      m.lineNoColWidth, line.aNum,
+      m.lineNoColWidth, "",
+      line.Render(background),
+    )
+  }
+
+  return gloss.NewStyle().
+    Width(m.w).
+    Background(background).
+    Render(lineContent)
+  /*
+    if sourceIdx == m.cursor {
+      view[i] = cursorStyle.Width(m.w).Render(lineContent)
+    } else {
+      view[i] = lineContent
+    }
+  */
 }
 
 func NewModel() Model {
@@ -114,7 +136,7 @@ func NewModel() Model {
     panic(err)
   }
 
-  df, err := FormatFile(string(bcontents), string(dcontents), "javascript")
+  ff, err := FormatFile(string(bcontents), string(dcontents), "javascript")
   if err != nil {
     panic(err)
   }
@@ -122,8 +144,8 @@ func NewModel() Model {
   //TestFormat(string(bcontents))
 
   model := Model{
-    diff: df,
-    lineNoColWidth: GetLineNoColWidth(df),
+    ff: ff,
+    lineNoColWidth: GetLineNoColWidth(ff),
   }
 
   return model

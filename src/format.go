@@ -10,8 +10,29 @@ import (
 )
 
 type UnRenderedToken struct {
-  text string
+  text  string
   style gloss.Style
+}
+
+type FormattedLine struct {
+  tokens []UnRenderedToken
+  mode   Mode
+  aNum   int
+  bNum   int
+}
+
+func (l *FormattedLine) Render(background gloss.Color) string {
+  var b strings.Builder
+
+  for _, token := range l.tokens {
+    b.WriteString(token.style.Background(background).Render(token.text))
+  }
+
+  return b.String()
+}
+
+type FormattedFile struct {
+  lines []*FormattedLine
 }
 
 func ReconstituteDiff(df *DiffFile) (string, string) {
@@ -66,8 +87,8 @@ func Highlight(s string, fType string) ([][]UnRenderedToken, error) {
   return ret, nil
 }
 
-func FormatFile(base string, diff string, fType string) (*DiffFile, error) {
-  var formattedDiff DiffFile
+func FormatFile(base string, diff string, fType string) (*FormattedFile, error) {
+  var formattedFile FormattedFile
 
   df, err := AnnotateWithDiff(base, diff)
   if err != nil {
@@ -84,31 +105,25 @@ func FormatFile(base string, diff string, fType string) (*DiffFile, error) {
     return nil, err
   }
 
-  fmt.Printf("a %d b %d %s", len(baseFormatted), len(targFormatted), baseFormatted[0])
-
   for _, line := range df.lines {
-    deRefLine := *line
-    var builder strings.Builder
+    var tokens []UnRenderedToken
 
     if line.mode == UNCHANGED {
-      for _, token := range baseFormatted[line.aNum - 1] {
-        builder.WriteString(token.style.Faint(true).Render(token.text))
-      }
+      tokens = baseFormatted[line.aNum - 1]
     } else if line.mode == REMOVED {
-      for _, token := range baseFormatted[line.aNum - 1] {
-        builder.WriteString(token.style.Render(token.text))
-      }
+      tokens = baseFormatted[line.aNum - 1]
     } else {
-      for _, token := range baseFormatted[line.bNum - 1] {
-        builder.WriteString(token.style.Render(token.text))
-      }
+      tokens = targFormatted[line.bNum - 1]
     }
 
-    deRefLine.text = builder.String()
-    formattedDiff.lines = append(formattedDiff.lines, &deRefLine)
-    //fmt.Printf("%s\n", deRefLine.text)
+    formattedFile.lines = append(formattedFile.lines, &FormattedLine{
+      tokens: tokens,
+      mode: line.mode,
+      aNum: line.aNum,
+      bNum: line.bNum,
+    })
   }
 
-  return &formattedDiff, nil
+  return &formattedFile, nil
 }
 
