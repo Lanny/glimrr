@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 
-go run ./src &
+go build -o glimrr ./src
+./glimrr &
 last_pid=$!
 
 while read line
 do
-  kill -s INT $last_pid
+  while kill -s INT $last_pid; do 
+      sleep 0.1
+  done
   clear
-  go run ./src &
+  go build -o glimrr ./src
+  ./glimrr &
   last_pid=$!
 done
 

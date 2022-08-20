@@ -2,8 +2,8 @@ package main
 
 import (
   "fmt"
-  "os"
   "strings"
+  "os"
 //  "github.com/alecthomas/chroma"
   gloss "github.com/charmbracelet/lipgloss"
   tea "github.com/charmbracelet/bubbletea"
@@ -61,6 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   return m, nil
 }
 
+
 var bgColorMap = [...]string{
   "#000",
   "#040",
@@ -69,6 +70,16 @@ var bgColorMap = [...]string{
   "#444",
   "#474",
   "#744",
+}
+
+func jankLog(msg string) {
+  f, err := tea.LogToFile("debug.log", "debug")
+  if err != nil {
+		fmt.Println("fatal:", err)
+		os.Exit(1)
+  }
+  f.WriteString(msg)
+  defer f.Close()
 }
 
 
@@ -81,6 +92,7 @@ func (m Model) View() string {
     isCursor := sourceIdx == m.cursor
     view[i] = m.renderLine(line, isCursor)
   }
+
 
   return strings.Join(view, "\n")
 }
@@ -134,6 +146,8 @@ func NewModel() Model {
   if err != nil {
     panic(err)
   }
+
+
 
   bcontents, err := os.ReadFile("./test-data/taxDoc.js")
   if err != nil {

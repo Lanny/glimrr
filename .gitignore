@@ -12,3 +12,7 @@
 *.out
 
 *.swp
+
+# project specific
+glimrr
+debug.log
