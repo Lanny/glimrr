@@ -61,7 +61,7 @@ func Highlight(s string, fType string) ([][]UnRenderedToken, error) {
 	var ret [][]UnRenderedToken
 
 	lexer := chroma.Coalesce(lexers.Get("javascript"))
-	style := styles.Get("monokai")
+	style := styles.Get("vim")
 	ti, err := lexer.Tokenise(nil, s)
 	if err != nil {
 		return nil, err

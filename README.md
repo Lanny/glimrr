@@ -3,7 +3,7 @@ GitLab Interactive Merge Request Review
 
 
 # REMEMBER:
-fswatch -o ./src | ./watch.sh
+fswatch --exclude ".*\.sw[px]$" --exclude ".*~$" -o ./src | ./watch.sh
 
 curl --header "PRIVATE-TOKEN: $MRAAG_GL_TOKEN" https://gitlab.bstock.io/api/v4/projects/400/merge_requests/530/versions/79964 | python3 -m json.tool
 
