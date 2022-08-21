@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 go build -o glimrr ./src
-./glimrr &
-last_pid=$!
+if [[ $? -eq 0 ]]; then
+  ./glimrr &
+  last_pid=$!
+fi
 
 while read line
 do
@@ -11,7 +13,9 @@ do
   done
   clear
   go build -o glimrr ./src
-  ./glimrr &
-  last_pid=$!
+  if [[ $? -eq 0 ]]; then
+    ./glimrr &
+    last_pid=$!
+  fi
 done
 
