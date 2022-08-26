@@ -9,64 +9,6 @@ import (
 	gloss "github.com/charmbracelet/lipgloss"
 )
 
-type Model struct {
-	ff             *FormattedFile
-	cursor         int
-	w              int
-	h              int
-	x              int
-	y              int
-	lineNoColWidth int
-}
-
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
-var cursorStyle = gloss.NewStyle().Background(gloss.Color("#AAAAAA"))
-
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	jankLog("q\n")
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.w = msg.Width
-		m.h = msg.Height
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-
-				if m.cursor < m.y {
-					m.y = m.cursor
-				}
-			}
-
-		case "down", "j":
-			if m.cursor < len(m.ff.lines)-1 {
-				m.cursor++
-
-				if m.cursor >= m.y+m.h {
-					m.y = m.cursor - m.h + 1
-				}
-			}
-
-		case "ctrl+d":
-			m.y = Min(m.y + m.h / 2, len(m.ff.lines) - 1 - m.h)
-			m.cursor = Min(m.cursor + m.h / 2, len(m.ff.lines) - 2)
-		case "ctrl+u":
-			m.y = Max(m.y - m.h / 2, 0)
-			m.cursor = Max(m.cursor - m.h / 2, 0)
-		}
-	}
-
-	return m, nil
-}
-
 var bgColorMap = [...]string{
 	"#000",
 	"#040",
@@ -87,20 +29,44 @@ func jankLog(msg string) {
 	defer f.Close()
 }
 
-func (m Model) View() string {
+type VRegion interface {
+	Height() int
+	Update(msg tea.Msg, m Model) tea.Cmd
+	View(startLine int, numLines int, cursor int, m *Model) string
+}
+
+type abbridgement struct {
+	start int
+	end   int
+}
+
+type FileRegion struct {
+	ff    *FormattedFile
+	abbrs []abbridgement
+}
+
+func (f *FileRegion) Height() int {
+	return len(f.ff.lines)
+}
+
+func (f *FileRegion) Update(msg tea.Msg, m Model) tea.Cmd {
+	return nil
+}
+
+func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
+	// TODO: This.
 	view := make([]string, m.h)
 
-	for i := 0; i < m.h; i++ {
-		sourceIdx := m.y + i
-		line := m.ff.lines[sourceIdx]
-		isCursor := sourceIdx == m.cursor
-		view[i] = m.renderLine(line, isCursor)
+	for i := startLine; i < numLines; i++ {
+		line := f.ff.lines[i]
+		isCursor := i == m.cursor
+		view[i] = f.renderLine(line, isCursor, m)
 	}
 
 	return strings.Join(view, "\n")
 }
 
-func (m Model) renderLine(line *FormattedLine, cursor bool) string {
+func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) string {
 	var lineContent string
 	bgIdx := line.mode
 	if cursor {
@@ -135,13 +101,117 @@ func (m Model) renderLine(line *FormattedLine, cursor bool) string {
 		Width(m.w).
 		Background(background).
 		Render(lineContent)
-	/*
-	   if sourceIdx == m.cursor {
-	     view[i] = cursorStyle.Width(m.w).Render(lineContent)
-	   } else {
-	     view[i] = lineContent
-	   }
-	*/
+}
+
+func newFileRegion(ff *FormattedFile) *FileRegion {
+	region := FileRegion{ ff: ff }
+
+	inNonAbbr := false
+	lastNonAbbrEnd := 0
+	linesWithoutChange := 0
+
+	for idx, line := range ff.lines {
+		if line.mode == UNCHANGED {
+			linesWithoutChange++
+
+			if inNonAbbr && linesWithoutChange >= 10 {
+				inNonAbbr = false
+				lastNonAbbrEnd = idx - 5
+			}
+		} else {
+			linesWithoutChange = 0
+
+			if !inNonAbbr {
+				inNonAbbr = true
+				region.abbrs = append(region.abbrs, abbridgement{
+					start: lastNonAbbrEnd,
+					end: Max(0, Max(lastNonAbbrEnd, idx - 5)),
+				})
+			}
+		}
+	}
+
+	if !inNonAbbr {
+		region.abbrs = append(region.abbrs, abbridgement{
+			start: lastNonAbbrEnd,
+			end: len(ff.lines) - 1,
+		})
+	}
+
+	jankLog(fmt.Sprintf("%+v\n", region.abbrs))
+
+	return &region
+}
+
+
+type Model struct {
+	cursor         int
+	w              int
+	h              int
+	x              int
+	y              int
+	lineNoColWidth int
+	regions        []VRegion
+}
+
+func (m Model) Init() tea.Cmd {
+	return nil
+}
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	totalHeight := m.totalHeight()
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w = msg.Width
+		m.h = msg.Height
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+
+				if m.cursor < m.y {
+					m.y = m.cursor
+				}
+			}
+
+		case "down", "j":
+			if m.cursor < totalHeight-1 {
+				m.cursor++
+
+				if m.cursor >= m.y+m.h {
+					m.y = m.cursor - m.h + 1
+				}
+			}
+
+		case "ctrl+d":
+			m.y = Min(m.y + m.h / 2, totalHeight - 1 - m.h)
+			m.cursor = Min(m.cursor + m.h / 2, totalHeight - 2)
+		case "ctrl+u":
+			m.y = Max(m.y - m.h / 2, 0)
+			m.cursor = Max(m.cursor - m.h / 2, 0)
+		}
+	}
+
+	return m, nil
+}
+
+func (m Model) View() string {
+	return m.regions[0].View(m.y, m.h, m.cursor, &m)
+}
+
+func (m Model) totalHeight() int {
+	h := 0
+	for _, region := range m.regions {
+		h += region.Height()
+	}
+
+	return h
 }
 
 func NewModel() Model {
@@ -162,10 +232,11 @@ func NewModel() Model {
 
 	//TestFormat(string(bcontents))
 
+
 	model := Model{
-		ff:             ff,
 		lineNoColWidth: GetLineNoColWidth(ff),
 	}
+	model.regions = append(model.regions, newFileRegion(ff))
 
 	return model
 }
