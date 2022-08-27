@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	//  "github.com/alecthomas/chroma"
+	"sync"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
 )
@@ -41,9 +41,10 @@ type abridgement struct {
 }
 
 type FileRegion struct {
-	ff      *FormattedFile
-	lineMap []int
-	abrs    []abridgement
+	ff             *FormattedFile
+	lineMap        []int
+	abrs           []abridgement
+	lineNoColWidth int
 }
 
 func (f *FileRegion) Height() int {
@@ -104,22 +105,22 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 	if line.mode == UNCHANGED {
 		lineContent = fmt.Sprintf(
 			"%*d %*d  %s",
-			m.lineNoColWidth, line.aNum,
-			m.lineNoColWidth, line.bNum,
+			f.lineNoColWidth, line.aNum,
+			f.lineNoColWidth, line.bNum,
 			line.Render(background),
 		)
 	} else if line.mode == ADDED {
 		lineContent = fmt.Sprintf(
 			"%*s %*d +%s",
-			m.lineNoColWidth, "",
-			m.lineNoColWidth, line.bNum,
+			f.lineNoColWidth, "",
+			f.lineNoColWidth, line.bNum,
 			line.Render(background),
 		)
 	} else {
 		lineContent = fmt.Sprintf(
 			"%*d %*s -%s",
-			m.lineNoColWidth, line.aNum,
-			m.lineNoColWidth, "",
+			f.lineNoColWidth, line.aNum,
+			f.lineNoColWidth, "",
 			line.Render(background),
 		)
 	}
@@ -182,10 +183,8 @@ func newFileRegion(ff *FormattedFile) *FileRegion {
 		})
 	}
 
+	region.lineNoColWidth = GetLineNoColWidth(ff)
 	region.updateLineMap()
-
-	jankLog(fmt.Sprintf("%+v\n", region.abrs))
-
 	return &region
 }
 
@@ -195,7 +194,6 @@ type Model struct {
 	h              int
 	x              int
 	y              int
-	lineNoColWidth int
 	regions        []VRegion
 }
 
@@ -263,28 +261,62 @@ func (m Model) totalHeight() int {
 	return h
 }
 
+type CreateFileRegionMsg struct {
+	idx  int
+	pid  int
+	path string
+	diff string
+	ref  string
+}
+
 func NewModel() Model {
-	dcontents, err := os.ReadFile("./test-data/taxDoc.diff")
+	gl := GLInstance{apiUrl: "https://gitlab.bstock.io/api"}
+	mrData, err := gl.FetchMR(400, 634)
 	if err != nil {
 		panic(err)
 	}
 
-	bcontents, err := os.ReadFile("./test-data/taxDoc.js")
-	if err != nil {
-		panic(err)
+	var wg sync.WaitGroup
+	regions := make([]VRegion, len(mrData.Changes))
+	q := make(chan CreateFileRegionMsg, 8)
+
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			for msg := range q {
+				baseContent, err := gl.FetchFileContents(msg.pid, msg.path, msg.ref)
+				if err != nil {
+					panic(err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println(msg.diff)
+				ff, err := FormatFile(*baseContent, msg.diff, "javascript")
+				if err != nil {
+					panic(err)
+				}
+				regions[msg.idx] = newFileRegion(ff)
+			}
+			wg.Done()
+		}()
+
 	}
 
-	ff, err := FormatFile(string(bcontents), string(dcontents), "javascript")
-	if err != nil {
-		panic(err)
+	for idx, change := range mrData.Changes {
+		q <- CreateFileRegionMsg{
+			idx: idx,
+			pid: 400,
+			path: change.OldPath,
+			diff: change.Diff,
+			ref: mrData.SourceBranch,
+		}
 	}
-
-	//TestFormat(string(bcontents))
+	close(q)
+	wg.Wait()
 
 	model := Model{
-		lineNoColWidth: GetLineNoColWidth(ff),
+		regions: regions,
 	}
-	model.regions = append(model.regions, newFileRegion(ff))
 
 	return model
 }

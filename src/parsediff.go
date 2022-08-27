@@ -39,7 +39,7 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
 	var bLine int
 	var err error
 
-	hunkPat := regexp.MustCompile(`@@ -(?P<AStart>\d+),(?P<ALen>\d+) \+(?P<BStart>\d+),(?P<BEnd>\d+) @@ (?P<Ctx>.*)`)
+	hunkPat := regexp.MustCompile(`@@ -(?P<AStart>\d+),(?P<ALen>\d+) \+(?P<BStart>\d+),(?P<BEnd>\d+) @@(?P<Ctx>.*)`)
 
 	for idx, line := range diffLines {
 		lineNo := idx + 1
@@ -50,7 +50,7 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
 			matches := hunkPat.FindStringSubmatch(line)
 
 			if len(matches) < 6 {
-				return nil, fmt.Errorf("Unable to parse hunk header at line %d", lineNo)
+				return nil, fmt.Errorf("Unable to parse hunk header at line %d, insufficient matches", lineNo)
 			}
 
 			aLine, err = strconv.Atoi(matches[1])
