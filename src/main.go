@@ -55,11 +55,11 @@ func (f *FileRegion) Update(msg tea.Msg, m Model) tea.Cmd {
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
 	// TODO: This.
-	view := make([]string, m.h)
+	view := make([]string, numLines)
 
-	for i := startLine; i < numLines; i++ {
-		line := f.ff.lines[i]
-		isCursor := i == m.cursor
+	for i := 0; i < numLines; i++ {
+		line := f.ff.lines[i + startLine]
+		isCursor := i + startLine == m.cursor
 		view[i] = f.renderLine(line, isCursor, m)
 	}
 
@@ -159,8 +159,6 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	totalHeight := m.totalHeight()
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w = msg.Width
@@ -181,6 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "down", "j":
+			totalHeight := m.totalHeight()
 			if m.cursor < totalHeight-1 {
 				m.cursor++
 
@@ -190,6 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "ctrl+d":
+			totalHeight := m.totalHeight()
 			m.y = Min(m.y + m.h / 2, totalHeight - 1 - m.h)
 			m.cursor = Min(m.cursor + m.h / 2, totalHeight - 2)
 		case "ctrl+u":
@@ -202,6 +202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	jankLog(fmt.Sprintf("y: %d, h: %d, th: %d\n", m.y, m.h, m.totalHeight()))
 	return m.regions[0].View(m.y, m.h, m.cursor, &m)
 }
 
