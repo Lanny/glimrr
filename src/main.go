@@ -35,7 +35,7 @@ type VRegion interface {
 	View(startLine int, numLines int, cursor int, m *Model) string
 }
 
-type abbridgement struct {
+type abridgement struct {
 	start int
 	end   int
 }
@@ -43,7 +43,7 @@ type abbridgement struct {
 type FileRegion struct {
 	ff      *FormattedFile
 	lineMap []int
-	abbrs   []abbridgement
+	abrs    []abridgement
 }
 
 func (f *FileRegion) Height() int {
@@ -58,15 +58,15 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	view := make([]string, numLines)
 
 	for i := 0; i < numLines; i++ {
-		lineIdx := f.lineMap[startLine + i]
-		isCursor := i + startLine == m.cursor
+		lineIdx := f.lineMap[startLine+i]
+		isCursor := i+startLine == m.cursor
 
 		if lineIdx > 0 {
 			line := f.ff.lines[lineIdx]
 			view[i] = f.renderLine(line, isCursor, m)
 		} else {
 			var bgColor gloss.Color
-			if (isCursor) {
+			if isCursor {
 				bgColor = gloss.Color(bgColorMap[4])
 			} else {
 				bgColor = gloss.Color(bgColorMap[0])
@@ -123,13 +123,13 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 func (f *FileRegion) updateLineMap() {
 	f.lineMap = make([]int, 0)
 	idx := 0
-	abbrIdx := 0
+	abrIdx := 0
 
 	for idx < len(f.ff.lines) {
-		if idx == f.abbrs[abbrIdx].start {
-			f.lineMap = append(f.lineMap, -abbrIdx)
-			idx = f.abbrs[abbrIdx].end + 1
-			abbrIdx++
+		if idx == f.abrs[abrIdx].start {
+			f.lineMap = append(f.lineMap, -abrIdx)
+			idx = f.abrs[abrIdx].end + 1
+			abrIdx++
 		} else {
 			f.lineMap = append(f.lineMap, idx)
 			idx++
@@ -138,47 +138,46 @@ func (f *FileRegion) updateLineMap() {
 }
 
 func newFileRegion(ff *FormattedFile) *FileRegion {
-	region := FileRegion{ ff: ff }
+	region := FileRegion{ff: ff}
 
-	inNonAbbr := false
-	lastNonAbbrEnd := 0
+	inNonAbr := false
+	lastNonAbrEnd := 0
 	linesWithoutChange := 0
 
 	for idx, line := range ff.lines {
 		if line.mode == UNCHANGED {
 			linesWithoutChange++
 
-			if inNonAbbr && linesWithoutChange >= 10 {
-				inNonAbbr = false
-				lastNonAbbrEnd = idx - 5
+			if inNonAbr && linesWithoutChange >= 10 {
+				inNonAbr = false
+				lastNonAbrEnd = idx - 5
 			}
 		} else {
 			linesWithoutChange = 0
 
-			if !inNonAbbr {
-				inNonAbbr = true
-				region.abbrs = append(region.abbrs, abbridgement{
-					start: lastNonAbbrEnd,
-					end: Max(0, Max(lastNonAbbrEnd, idx - 5)),
+			if !inNonAbr {
+				inNonAbr = true
+				region.abrs = append(region.abrs, abridgement{
+					start: lastNonAbrEnd,
+					end:   Max(0, Max(lastNonAbrEnd, idx-5)),
 				})
 			}
 		}
 	}
 
-	if !inNonAbbr {
-		region.abbrs = append(region.abbrs, abbridgement{
-			start: lastNonAbbrEnd,
-			end: len(ff.lines) - 1,
+	if !inNonAbr {
+		region.abrs = append(region.abrs, abridgement{
+			start: lastNonAbrEnd,
+			end:   len(ff.lines) - 1,
 		})
 	}
 
 	region.updateLineMap()
 
-	jankLog(fmt.Sprintf("%+v\n", region.abbrs))
+	jankLog(fmt.Sprintf("%+v\n", region.abrs))
 
 	return &region
 }
-
 
 type Model struct {
 	cursor         int
@@ -226,11 +225,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
-			m.y = Min(m.y + m.h / 2, totalHeight - 1 - m.h)
-			m.cursor = Min(m.cursor + m.h / 2, totalHeight - 2)
+			m.y = Min(m.y+m.h/2, totalHeight-1-m.h)
+			m.cursor = Min(m.cursor+m.h/2, totalHeight-2)
 		case "ctrl+u":
-			m.y = Max(m.y - m.h / 2, 0)
-			m.cursor = Max(m.cursor - m.h / 2, 0)
+			m.y = Max(m.y-m.h/2, 0)
+			m.cursor = Max(m.cursor-m.h/2, 0)
 		}
 	}
 
@@ -268,7 +267,6 @@ func NewModel() Model {
 	}
 
 	//TestFormat(string(bcontents))
-
 
 	model := Model{
 		lineNoColWidth: GetLineNoColWidth(ff),
