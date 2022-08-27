@@ -31,7 +31,7 @@ func jankLog(msg string) {
 
 type VRegion interface {
 	Height() int
-	Update(msg tea.Msg, m Model) tea.Cmd
+	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
 	View(startLine int, numLines int, cursor int, m *Model) string
 }
 
@@ -50,7 +50,16 @@ func (f *FileRegion) Height() int {
 	return len(f.lineMap)
 }
 
-func (f *FileRegion) Update(msg tea.Msg, m Model) tea.Cmd {
+func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
+	if msg.String() == "enter" {
+		lineIdx := f.lineMap[cursor]
+		if lineIdx < 0 {
+			abrIdx := (-lineIdx) - 1
+			f.abrs = append(f.abrs[:abrIdx], f.abrs[abrIdx+1:]...)
+			f.updateLineMap()
+		}
+	}
+
 	return nil
 }
 
@@ -127,7 +136,7 @@ func (f *FileRegion) updateLineMap() {
 
 	for idx < len(f.ff.lines) {
 		if idx == f.abrs[abrIdx].start {
-			f.lineMap = append(f.lineMap, -abrIdx)
+			f.lineMap = append(f.lineMap, -(abrIdx+1))
 			idx = f.abrs[abrIdx].end + 1
 			abrIdx++
 		} else {
@@ -230,6 +239,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
 			m.cursor = Max(m.cursor-m.h/2, 0)
+		default:
+			cmd := m.regions[0].Update(&m, msg, m.cursor)
+			return m, cmd
 		}
 	}
 
