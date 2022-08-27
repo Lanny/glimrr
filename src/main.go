@@ -41,12 +41,13 @@ type abbridgement struct {
 }
 
 type FileRegion struct {
-	ff    *FormattedFile
-	abbrs []abbridgement
+	ff      *FormattedFile
+	lineMap []int
+	abbrs   []abbridgement
 }
 
 func (f *FileRegion) Height() int {
-	return len(f.ff.lines)
+	return len(f.lineMap)
 }
 
 func (f *FileRegion) Update(msg tea.Msg, m Model) tea.Cmd {
@@ -54,13 +55,18 @@ func (f *FileRegion) Update(msg tea.Msg, m Model) tea.Cmd {
 }
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
-	// TODO: This.
 	view := make([]string, numLines)
 
 	for i := 0; i < numLines; i++ {
-		line := f.ff.lines[i + startLine]
 		isCursor := i + startLine == m.cursor
-		view[i] = f.renderLine(line, isCursor, m)
+		lineIdx := f.lineMap[startLine + i]
+
+		if lineIdx > 0 {
+			line := f.ff.lines[lineIdx]
+			view[i] = f.renderLine(line, isCursor, m)
+		} else {
+			view[i] = "..."
+		}
 	}
 
 	return strings.Join(view, "\n")
@@ -103,6 +109,23 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 		Render(lineContent)
 }
 
+func (f *FileRegion) updateLineMap() {
+	f.lineMap = make([]int, 0)
+	idx := 0
+	abbrIdx := 0
+
+	for idx < len(f.ff.lines) {
+		if idx == f.abbrs[abbrIdx].start {
+			f.lineMap = append(f.lineMap, -abbrIdx)
+			idx = f.abbrs[abbrIdx].end + 1
+			abbrIdx++
+		} else {
+			f.lineMap = append(f.lineMap, idx)
+			idx++
+		}
+	}
+}
+
 func newFileRegion(ff *FormattedFile) *FileRegion {
 	region := FileRegion{ ff: ff }
 
@@ -137,6 +160,8 @@ func newFileRegion(ff *FormattedFile) *FileRegion {
 			end: len(ff.lines) - 1,
 		})
 	}
+
+	region.updateLineMap()
 
 	jankLog(fmt.Sprintf("%+v\n", region.abbrs))
 
@@ -203,7 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	jankLog(fmt.Sprintf("y: %d, h: %d, th: %d\n", m.y, m.h, m.totalHeight()))
-	return m.regions[0].View(m.y, m.h, m.cursor, &m)
+	return m.regions[0].View(m.y, Min(m.h, m.totalHeight()), m.cursor, &m)
 }
 
 func (m Model) totalHeight() int {
