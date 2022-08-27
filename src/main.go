@@ -58,14 +58,25 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	view := make([]string, numLines)
 
 	for i := 0; i < numLines; i++ {
-		isCursor := i + startLine == m.cursor
 		lineIdx := f.lineMap[startLine + i]
+		isCursor := i + startLine == m.cursor
 
 		if lineIdx > 0 {
 			line := f.ff.lines[lineIdx]
 			view[i] = f.renderLine(line, isCursor, m)
 		} else {
-			view[i] = "..."
+			var bgColor gloss.Color
+			if (isCursor) {
+				bgColor = gloss.Color(bgColorMap[4])
+			} else {
+				bgColor = gloss.Color(bgColorMap[0])
+			}
+
+			view[i] = gloss.NewStyle().
+				Width(m.w).
+				Align(gloss.Center).
+				Background(bgColor).
+				Render("...")
 		}
 	}
 
