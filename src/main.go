@@ -136,7 +136,7 @@ func (f *FileRegion) updateLineMap() {
 	abrIdx := 0
 
 	for idx < len(f.ff.lines) {
-		if idx == f.abrs[abrIdx].start {
+		if abrIdx < len(f.abrs) && idx == f.abrs[abrIdx].start {
 			f.lineMap = append(f.lineMap, -(abrIdx+1))
 			idx = f.abrs[abrIdx].end + 1
 			abrIdx++
