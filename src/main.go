@@ -60,6 +60,7 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		}
 	}
 
+	jankLog(fmt.Sprintf("%+v\n", f.abrs))
 	return nil
 }
 
@@ -70,7 +71,7 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 		lineIdx := f.lineMap[startLine+i]
 		isCursor := i+startLine == m.cursor
 
-		if lineIdx > 0 {
+		if lineIdx >= 0 {
 			line := f.ff.lines[lineIdx]
 			view[i] = f.renderLine(line, isCursor, m)
 		} else {
