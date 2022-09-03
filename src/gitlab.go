@@ -19,6 +19,12 @@ type GLChangeData struct {
 	DeletedFile bool   `json:"deleted_file"`
 }
 
+type GLDiffRefs struct {
+	BaseSHA  string `json:"base_sha"`
+	HeadSHA  string `json:"head_sha"`
+	StartSHA string `json:"start_sha"`
+}
+
 type GLMRData struct {
 	Title        string
 	CreatedAt    string `json:"created_at"`
@@ -26,6 +32,7 @@ type GLMRData struct {
 	TargetBranch string `json:"target_branch"`
 	SourceBranch string `json:"source_branch"`
 	Changes      []GLChangeData
+	DiffRefs     GLDiffRefs `json:"diff_refs"`
 }
 
 type GLInstance struct {

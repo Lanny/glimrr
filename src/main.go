@@ -61,7 +61,6 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		}
 	}
 
-	jankLog(fmt.Sprintf("%+v\n", f.abrs))
 	return nil
 }
 
@@ -70,7 +69,7 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 
 	for i := 0; i < numLines; i++ {
 		lineIdx := f.lineMap[startLine+i]
-		isCursor := i+startLine == m.cursor
+		isCursor := i+startLine == cursor
 
 		if lineIdx >= 0 {
 			line := f.ff.lines[lineIdx]
@@ -155,6 +154,7 @@ func newFileRegion(ff *FormattedFile) *FileRegion {
 	lastNonAbrEnd := 0
 	linesWithoutChange := 0
 
+
 	for idx, line := range ff.lines {
 		if line.mode == UNCHANGED {
 			linesWithoutChange++
@@ -182,6 +182,8 @@ func newFileRegion(ff *FormattedFile) *FileRegion {
 			end:   len(ff.lines) - 1,
 		})
 	}
+
+	jankLog(fmt.Sprintf("len(ff.lines): %d\n", len(ff.lines)))
 
 	region.lineNoColWidth = GetLineNoColWidth(ff)
 	region.updateLineMap()
@@ -248,8 +250,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	jankLog(fmt.Sprintf("y: %d, h: %d, th: %d\n", m.y, m.h, m.totalHeight()))
-	return m.regions[0].View(m.y, Min(m.h, m.totalHeight()), m.cursor, &m)
+	var parts []string
+	cumY := 0
+
+	for _, region := range m.regions {
+		rH := region.Height()
+
+		if cumY > m.y + m.h {
+			// Got enough lines to paint a screen
+			break
+		}
+
+		if cumY + rH < m.y {
+			// Region is out of viewport
+			continue
+		}
+
+		startLine := Max(m.y - cumY - rH, 0)
+		linesToRender := Min(rH - startLine, m.y + m.h - cumY)
+		cursor := m.cursor - cumY
+		if m.cursor > cumY + rH || m.cursor < cumY {
+			cursor = -1
+		}
+
+		jankLog(fmt.Sprintf("my: %d, mh: %d, cY: %d\n", m.y, m.h, cumY))
+		jankLog(fmt.Sprintf("s: %d, ltr: %d, c: %d, rh: %d\n", startLine, linesToRender, cursor, rH))
+		parts = append(parts, region.View(startLine, linesToRender, cursor, &m))
+		cumY += rH
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 func (m Model) totalHeight() int {
@@ -271,7 +301,7 @@ type CreateFileRegionMsg struct {
 
 func NewModel() Model {
 	gl := GLInstance{apiUrl: "https://gitlab.bstock.io/api"}
-	mrData, err := gl.FetchMR(400, 634)
+	mrData, err := gl.FetchMR(400, 643)
 	if err != nil {
 		panic(err)
 	}
@@ -289,12 +319,12 @@ func NewModel() Model {
 					panic(err)
 				}
 
-				fmt.Println("=============================")
-				fmt.Println(msg.diff)
 				ff, err := FormatFile(*baseContent, msg.diff, "javascript")
 				if err != nil {
 					panic(err)
 				}
+
+				jankLog(fmt.Sprintf("ZZZ\nr: %s\nbaseContent: %s\nZZZ", msg.ref, *baseContent))
 				regions[msg.idx] = newFileRegion(ff)
 			}
 			wg.Done()
@@ -308,7 +338,7 @@ func NewModel() Model {
 			pid: 400,
 			path: change.OldPath,
 			diff: change.Diff,
-			ref: mrData.SourceBranch,
+			ref: mrData.TargetBranch,
 		}
 	}
 	close(q)
@@ -316,12 +346,15 @@ func NewModel() Model {
 
 	model := Model{
 		regions: regions,
+		w: 80,
+		h: 24,
 	}
 
 	return model
 }
 
 func main() {
+	jankLog("\n\n====== NEW RUN ======\n\n")
 	model := NewModel()
 	p := tea.NewProgram(model)
 
