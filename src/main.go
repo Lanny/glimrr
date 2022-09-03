@@ -41,6 +41,7 @@ type abridgement struct {
 }
 
 type FileRegion struct {
+	path           string
 	ff             *FormattedFile
 	lineMap        []int
 	abrs           []abridgement
@@ -48,7 +49,7 @@ type FileRegion struct {
 }
 
 func (f *FileRegion) Height() int {
-	return len(f.lineMap)
+	return len(f.lineMap) + 1
 }
 
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
@@ -67,8 +68,14 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
 	view := make([]string, numLines)
 
-	for i := 0; i < numLines; i++ {
-		lineIdx := f.lineMap[startLine+i]
+	view[0] = gloss.NewStyle().
+		Width(m.w).
+		Background(gloss.Color("#b9c902")).
+		Foreground(gloss.Color("#000")).
+		Render(fmt.Sprintf(" ▼ %s", f.path))
+
+	for i := 1; i < numLines; i++ {
+		lineIdx := f.lineMap[startLine+i-1]
 		isCursor := i+startLine == cursor
 
 		if lineIdx >= 0 {
@@ -147,8 +154,11 @@ func (f *FileRegion) updateLineMap() {
 	}
 }
 
-func newFileRegion(ff *FormattedFile) *FileRegion {
-	region := FileRegion{ff: ff}
+func newFileRegion(ff *FormattedFile, path string) *FileRegion {
+	region := FileRegion{
+		ff: ff,
+		path: path,
+	}
 
 	inNonAbr := false
 	lastNonAbrEnd := 0
@@ -325,7 +335,7 @@ func NewModel() Model {
 				}
 
 				jankLog(fmt.Sprintf("ZZZ\nr: %s\nbaseContent: %s\nZZZ", msg.ref, *baseContent))
-				regions[msg.idx] = newFileRegion(ff)
+				regions[msg.idx] = newFileRegion(ff, msg.path)
 			}
 			wg.Done()
 		}()
