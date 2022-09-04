@@ -54,7 +54,7 @@ func (f *FileRegion) Height() int {
 
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	if msg.String() == "enter" {
-		lineIdx := f.lineMap[cursor]
+		lineIdx := f.lineMap[cursor-1]
 		if lineIdx < 0 {
 			abrIdx := (-lineIdx) - 1
 			f.abrs = append(f.abrs[:abrIdx], f.abrs[abrIdx+1:]...)
@@ -251,7 +251,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.y = Max(m.y-m.h/2, 0)
 			m.cursor = Max(m.cursor-m.h/2, 0)
 		default:
-			cmd := m.regions[0].Update(&m, msg, m.cursor)
+			region, relCursor := m.getCursorTarget()
+			cmd := region.Update(&m, msg, relCursor)
 			return m, cmd
 		}
 	}
@@ -283,13 +284,26 @@ func (m Model) View() string {
 			cursor = -1
 		}
 
-		jankLog(fmt.Sprintf("my: %d, mh: %d, cY: %d\n", m.y, m.h, cumY))
-		jankLog(fmt.Sprintf("s: %d, ltr: %d, c: %d, rh: %d\n", startLine, linesToRender, cursor, rH))
 		parts = append(parts, region.View(startLine, linesToRender, cursor, &m))
 		cumY += rH
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+func (m Model) getCursorTarget() (VRegion, int) {
+	cumY := 0
+
+	for _, region := range m.regions {
+		rH := region.Height()
+		jankLog(fmt.Sprintf("rH: %d cumY: %d cursor: %d\n", rH, cumY, m.cursor))
+
+		if m.cursor < cumY + rH && m.cursor >= cumY {
+			return region, m.cursor - cumY
+		}
+		cumY += rH
+	}
+	panic("Unable to find the region the curor is currently in")
 }
 
 func (m Model) totalHeight() int {
