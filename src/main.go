@@ -193,8 +193,6 @@ func newFileRegion(ff *FormattedFile, path string) *FileRegion {
 		})
 	}
 
-	jankLog(fmt.Sprintf("len(ff.lines): %d\n", len(ff.lines)))
-
 	region.lineNoColWidth = GetLineNoColWidth(ff)
 	region.updateLineMap()
 	return &region
@@ -325,6 +323,7 @@ type CreateFileRegionMsg struct {
 
 func NewModel() Model {
 	gl := GLInstance{apiUrl: "https://gitlab.bstock.io/api"}
+	gl.Init()
 	mrData, err := gl.FetchMR(400, 643)
 	if err != nil {
 		panic(err)
@@ -348,7 +347,6 @@ func NewModel() Model {
 					panic(err)
 				}
 
-				jankLog(fmt.Sprintf("ZZZ\nr: %s\nbaseContent: %s\nZZZ", msg.ref, *baseContent))
 				regions[msg.idx] = newFileRegion(ff, msg.path)
 			}
 			wg.Done()

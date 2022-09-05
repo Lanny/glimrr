@@ -37,23 +37,55 @@ type GLMRData struct {
 
 type GLInstance struct {
 	apiUrl string
+	cache  map[string]([]byte)
+}
+
+func (gl *GLInstance) get(url string) ([]byte, error) {
+	client := &http.Client{}
+
+	jankLog(fmt.Sprintf("Requesting URL: %s\n", url))
+	if cachedVal, present := gl.cache[url]; present {
+		jankLog("Found in cache.\n")
+		return cachedVal, nil
+	} else {
+		jankLog("Not found in cache, requesting.\n")
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Add("PRIVATE-TOKEN", os.Getenv("MRAAG_GL_TOKEN"))
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		gl.cache[url] = body
+		serializedCache, err := json.Marshal(gl.cache)
+		os.WriteFile("glimmrCache.json", serializedCache, 0644)
+
+		return body, nil
+	}
+}
+
+func (gl *GLInstance) Init() {
+	seralizedCache, err := os.ReadFile("glimmrCache.json")
+	if err != nil {
+		jankLog("Unable to restore cache, creating empty.\n")
+		gl.cache = make(map[string]([]byte))
+	} else {
+		jankLog("Restoring cache from file.\n")
+		json.Unmarshal(seralizedCache, &gl.cache)
+	}
 }
 
 func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
-	client := &http.Client{}
-
 	url := fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/changes", strings.TrimSuffix(gl.apiUrl, "/"), pid, mrid)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("PRIVATE-TOKEN", os.Getenv("MRAAG_GL_TOKEN"))
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := gl.get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -65,21 +97,12 @@ func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
 }
 
 func (gl *GLInstance) FetchFileContents(pid int, path string, ref string) (*string, error) {
-	client := &http.Client{}
-
 	url := fmt.Sprintf("%s/v4/projects/%d/repository/files/%s/raw?ref=%s", strings.TrimSuffix(gl.apiUrl, "/"), pid, url.QueryEscape(path), url.QueryEscape(ref))
-	req, err := http.NewRequest("GET", url, nil)
+	body, err := gl.get(url)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("PRIVATE-TOKEN", os.Getenv("MRAAG_GL_TOKEN"))
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	bodyAsStr := string(body)
 
+	bodyAsStr := string(body)
 	return &bodyAsStr, nil
 }
