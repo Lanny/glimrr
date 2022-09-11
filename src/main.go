@@ -68,6 +68,7 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
 	view := make([]string, numLines)
 
+	jankLog(fmt.Sprintf("y: %d, m.c: %d, c: %d, sl: %d, n: %d\n", m.y, m.cursor, cursor, startLine, numLines))
 	view[0] = gloss.NewStyle().
 		Width(m.w).
 		Background(gloss.Color("#b9c902")).
@@ -77,6 +78,7 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	for i := 1; i < numLines; i++ {
 		lineIdx := f.lineMap[startLine+i-1]
 		isCursor := i+startLine == cursor
+		jankLog(fmt.Sprintf("ii: %d, i: %d, lineIdx: %d\n", startLine+i-1, i, lineIdx))
 
 		if lineIdx >= 0 {
 			line := f.ff.lines[lineIdx]
@@ -134,6 +136,8 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 	return gloss.NewStyle().
 		Width(m.w).
 		Background(background).
+		Inline(true).
+		MaxWidth(m.w).
 		Render(lineContent)
 }
 
@@ -275,8 +279,8 @@ func (m Model) View() string {
 			continue
 		}
 
-		startLine := Max(m.y - cumY - rH, 0)
-		linesToRender := Min(rH - startLine, m.y + m.h - cumY)
+		startLine := Max(m.y - cumY, 0)
+		linesToRender := Min(Min(rH - startLine, m.y + m.h - cumY), m.h)
 		cursor := m.cursor - cumY
 		if m.cursor > cumY + rH || m.cursor < cumY {
 			cursor = -1
