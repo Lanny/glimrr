@@ -66,9 +66,11 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 }
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
-	view := make([]string, numLines)
+	if numLines < 1 {
+		return ""
+	}
 
-	jankLog(fmt.Sprintf("y: %d, m.c: %d, c: %d, sl: %d, n: %d\n", m.y, m.cursor, cursor, startLine, numLines))
+	view := make([]string, numLines)
 	view[0] = gloss.NewStyle().
 		Width(m.w).
 		Background(gloss.Color("#b9c902")).
@@ -78,7 +80,6 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	for i := 1; i < numLines; i++ {
 		lineIdx := f.lineMap[startLine+i-1]
 		isCursor := i+startLine == cursor
-		jankLog(fmt.Sprintf("ii: %d, i: %d, lineIdx: %d\n", startLine+i-1, i, lineIdx))
 
 		if lineIdx >= 0 {
 			line := f.ff.lines[lineIdx]
@@ -247,8 +248,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
-			m.y = Min(m.y+m.h/2, totalHeight-1-m.h)
-			m.cursor = Min(m.cursor+m.h/2, totalHeight-2)
+			m.y = Min(m.y+(m.h+1)/2, totalHeight-1-m.h)
+			m.cursor = Min(m.cursor+(m.h+1)/2, totalHeight-1)
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
 			m.cursor = Max(m.cursor-m.h/2, 0)
@@ -258,6 +259,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	jankLog(fmt.Sprintf("c: %d, y: %d\n", m.cursor, m.y))
 
 	return m, nil
 }
@@ -290,7 +292,14 @@ func (m Model) View() string {
 		cumY += rH
 	}
 
-	return strings.Join(parts, "\n")
+
+	background := gloss.Color(bgColorMap[0])
+	return gloss.NewStyle().
+		Width(m.w).
+		Height(m.h).
+		MaxWidth(m.w).
+		Background(background).
+		Render(strings.Join(parts, "\n"))
 }
 
 func (m Model) getCursorTarget() (VRegion, int) {
@@ -298,7 +307,6 @@ func (m Model) getCursorTarget() (VRegion, int) {
 
 	for _, region := range m.regions {
 		rH := region.Height()
-		jankLog(fmt.Sprintf("rH: %d cumY: %d cursor: %d\n", rH, cumY, m.cursor))
 
 		if m.cursor < cumY + rH && m.cursor >= cumY {
 			return region, m.cursor - cumY
@@ -375,8 +383,8 @@ func NewModel() Model {
 		w: 80,
 		h: 24,
 	}
-
 	return model
+
 }
 
 func main() {
