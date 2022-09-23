@@ -33,6 +33,7 @@ type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
 	View(startLine int, numLines int, cursor int, m *Model) string
+	FullyExpand()
 }
 
 type abridgement struct {
@@ -142,6 +143,12 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 		Render(lineContent)
 }
 
+func (f *FileRegion) FullyExpand() {
+	f.abrs = f.abrs[:0]
+	f.updateLineMap()
+}
+
+
 func (f *FileRegion) updateLineMap() {
 	f.lineMap = make([]int, 0)
 	idx := 0
@@ -246,6 +253,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "e":
+			for _, region := range m.regions {
+				region.FullyExpand()
+			}
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
 			m.y = Min(m.y+(m.h+1)/2, totalHeight-1-m.h)
@@ -278,6 +289,7 @@ func (m Model) View() string {
 
 		if cumY + rH < m.y {
 			// Region is out of viewport
+			cumY += rH
 			continue
 		}
 
