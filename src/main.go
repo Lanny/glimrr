@@ -338,17 +338,19 @@ func (m Model) totalHeight() int {
 }
 
 type CreateFileRegionMsg struct {
-	idx  int
-	pid  int
-	path string
-	diff string
-	ref  string
+	idx    int
+	pid    int
+	ref    string
+	change GLChangeData
 }
 
 func NewModel() Model {
+	pid := 39953668
+	mrid := 1
+
 	gl := GLInstance{apiUrl: "https://gitlab.com/api"}
 	gl.Init()
-	mrData, err := gl.FetchMR(39953668, 1)
+	mrData, err := gl.FetchMR(pid, mrid)
 	if err != nil {
 		panic(err)
 	}
@@ -361,17 +363,28 @@ func NewModel() Model {
 		wg.Add(1)
 		go func() {
 			for msg := range q {
-				baseContent, err := gl.FetchFileContents(msg.pid, msg.path, msg.ref)
+				var baseContent string
+
+				if !msg.change.NewFile {
+					fetchedContent, err := gl.FetchFileContents(
+						msg.pid,
+						msg.change.OldPath,
+						msg.ref,
+					)
+					if err != nil {
+						panic(err)
+					}
+					baseContent = *fetchedContent
+				} else {
+					baseContent = ""
+				}
+
+				ff, err := FormatFile(baseContent, msg.change.Diff, "javascript")
 				if err != nil {
 					panic(err)
 				}
 
-				ff, err := FormatFile(*baseContent, msg.diff, "javascript")
-				if err != nil {
-					panic(err)
-				}
-
-				regions[msg.idx] = newFileRegion(ff, msg.path)
+				regions[msg.idx] = newFileRegion(ff, msg.change.OldPath)
 			}
 			wg.Done()
 		}()
@@ -381,9 +394,8 @@ func NewModel() Model {
 	for idx, change := range mrData.Changes {
 		q <- CreateFileRegionMsg{
 			idx: idx,
-			pid: 400,
-			path: change.OldPath,
-			diff: change.Diff,
+			pid: pid,
+			change: change,
 			ref: mrData.TargetBranch,
 		}
 	}

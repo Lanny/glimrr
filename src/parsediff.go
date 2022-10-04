@@ -105,6 +105,10 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
 		}
 	}
 
+	if hunk != nil {
+		hunks = append(hunks, hunk)
+	}
+
 	return hunks, nil
 }
 
@@ -127,10 +131,6 @@ func AnnotateWithDiff(base string, diff string) (*DiffFile, error) {
 	}
 
 	for {
-		if aLine > len(baseLines) && nextHunk == nil {
-			break
-		}
-
 		if nextHunk != nil && aLine >= nextHunk.baseStart {
 			for _, diffLine := range nextHunk.lines {
 				diffFile.lines = append(diffFile.lines, diffLine)
@@ -145,6 +145,8 @@ func AnnotateWithDiff(base string, diff string) (*DiffFile, error) {
 			} else {
 				nextHunk = nil
 			}
+		} else if aLine >= len(baseLines) && nextHunk == nil {
+			break
 		} else {
 			diffFile.lines = append(diffFile.lines, &DiffLine{
 				text: baseLines[aLine-1],
