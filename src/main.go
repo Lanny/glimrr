@@ -346,9 +346,9 @@ type CreateFileRegionMsg struct {
 }
 
 func NewModel() Model {
-	gl := GLInstance{apiUrl: "https://gitlab.bstock.io/api"}
+	gl := GLInstance{apiUrl: "https://gitlab.com/api"}
 	gl.Init()
-	mrData, err := gl.FetchMR(400, 643)
+	mrData, err := gl.FetchMR(39953668, 1)
 	if err != nil {
 		panic(err)
 	}

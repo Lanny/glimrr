@@ -53,7 +53,7 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Add("PRIVATE-TOKEN", os.Getenv("MRAAG_GL_TOKEN"))
+		req.Header.Add("PRIVATE-TOKEN", os.Getenv("GLIMRR_TOKEN"))
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
