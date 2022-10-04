@@ -59,6 +59,9 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
+		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
