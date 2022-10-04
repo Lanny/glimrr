@@ -1,14 +1,17 @@
 # glimrr
-GitLab Interactive Merge Request Review
+glimrr: GitLab Interactive Merge Request Review
+
+Glimrr is a TUI for conducting gitlab merge request reviews at the terminal. It aims to be lighter and faster than the browser based interface, and hopefully more keyboard ergonomic.
 
 
-# REMEMBER:
-export GLIMRR_TOKEN=...
+# Dev Notes
 
+To allow glimrr to access and modify merge requests, set the `GLIMRR_TOKEN` environment variable.
+
+For an auto-reloading dev setup, run:
+
+```
 fswatch --exclude ".*\.sw[px]$" --exclude ".*~$" -o ./src | ./watch.sh
+```
 
-curl --header "PRIVATE-TOKEN: $MRAAG_GL_TOKEN" https://gitlab.bstock.io/api/v4/projects/400/merge_requests/530/versions/79964 | python3 -m json.tool
-
-curl --header "PRIVATE-TOKEN: $MRAAG_GL_TOKEN" https://gitlab.bstock.io/api/v4/projects/400/repository/files/src%2Fapp%2Fstore%2Fdata%2Fmodules%2FtaxDoc.js\?ref\=eb41cfd2e052446b4f45024425bd18c75319f2d8 | python3 -m json.tool | jq -r '.content' | base64 --decode > test-data/b
-
-[ryan.jenkins:~/glimrr]$ curl --header "PRIVATE-TOKEN: $MRAAG_GL_TOKEN" https://gitlab.bstock.io/api/v4/projects/400/repository/files/src%2Fapp%2Fstore%2Fdata%2Fmodules%2FtaxDoc.js\?ref\=HEAD | python3 -m json.tool | jq -r '.content' | base64 --decode > test-data/a
+Note that you'll need to get [fswatch](https://emcrisostomo.github.io/fswatch/) somehow, likely from your package manager. I used brew.
