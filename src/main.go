@@ -408,7 +408,7 @@ func NewModel() Model {
 					baseContent = ""
 				}
 
-				ff, err := FormatFile(baseContent, msg.change.Diff, "javascript")
+				ff, err := FormatFile(baseContent, msg.change.Diff, msg.change.NewPath)
 				if err != nil {
 					panic(err)
 				}

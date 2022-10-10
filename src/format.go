@@ -57,10 +57,10 @@ func ReconstituteDiff(df *DiffFile) (string, string) {
 	return aBuilder.String(), bBuilder.String()
 }
 
-func Highlight(s string, fType string) ([][]UnRenderedToken, error) {
+func Highlight(s string, baseLexer chroma.Lexer) ([][]UnRenderedToken, error) {
 	var ret [][]UnRenderedToken
 
-	lexer := chroma.Coalesce(lexers.Get("javascript"))
+	lexer := chroma.Coalesce(baseLexer)
 	style := styles.Get("vim")
 	detabbed := strings.ReplaceAll(s, "\t", "  ")
 	ti, err := lexer.Tokenise(nil, detabbed)
@@ -88,8 +88,9 @@ func Highlight(s string, fType string) ([][]UnRenderedToken, error) {
 	return ret, nil
 }
 
-func FormatFile(base string, diff string, fType string) (*FormattedFile, error) {
+func FormatFile(base string, diff string, filename string) (*FormattedFile, error) {
 	var formattedFile FormattedFile
+	var lexer chroma.Lexer
 
 	df, err := AnnotateWithDiff(base, diff)
 	if err != nil {
@@ -97,11 +98,17 @@ func FormatFile(base string, diff string, fType string) (*FormattedFile, error) 
 	}
 
 	baseStr, targStr := ReconstituteDiff(df)
-	baseFormatted, err := Highlight(baseStr, fType)
+
+	lexer = lexers.Match(filename)
+	if lexer == nil {
+		lexer = lexers.Fallback
+	}
+
+	baseFormatted, err := Highlight(baseStr, lexer)
 	if err != nil {
 		return nil, err
 	}
-	targFormatted, err := Highlight(targStr, fType)
+	targFormatted, err := Highlight(targStr, lexer)
 	if err != nil {
 		return nil, err
 	}
