@@ -29,10 +29,16 @@ const (
 )
 
 type FileRegion struct {
-	path           string
 	ff             *FormattedFile
-	lineMap        []int
+
+	oldPath        string
+	newPath        string
+	added          bool
+	removed        bool
+
 	collapsed      bool
+
+	lineMap        []int
 	abrs           []abridgement
 	lineNoColWidth int
 }
@@ -84,12 +90,19 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 		ecSymbol = "▶"
 	}
 
+	modeString := ""
+	if f.added {
+		modeString = " [NEW]"
+	} else if f.removed {
+		modeString = " [DELETED]"
+	}
+
 	// Render the file header
 	view[0] = gloss.NewStyle().
 		Width(m.w).
 		Background(gloss.Color("#b9c902")).
 		Foreground(gloss.Color("#000")).
-		Render(fmt.Sprintf(" %s %s", ecSymbol, f.path))
+		Render(fmt.Sprintf(" %s %s%s", ecSymbol, f.newPath, modeString))
 
 	// Start from 1 to ignore space for header 
 	for i := 1; i < numLines; i++ {
@@ -187,10 +200,13 @@ func (f *FileRegion) updateLineMap() {
 	}
 }
 
-func newFileRegion(ff *FormattedFile, path string) *FileRegion {
+func newFileRegion(ff *FormattedFile, change GLChangeData) *FileRegion {
 	region := FileRegion{
 		ff: ff,
-		path: path,
+		oldPath: change.OldPath,
+		newPath: change.NewPath,
+		added: change.NewFile,
+		removed: change.DeletedFile,
 		collapsed: false,
 	}
 
@@ -410,7 +426,7 @@ func NewModel() Model {
 					panic(err)
 				}
 
-				regions[msg.idx] = newFileRegion(ff, msg.change.OldPath)
+				regions[msg.idx] = newFileRegion(ff, msg.change)
 			}
 			wg.Done()
 		}()
