@@ -207,7 +207,7 @@ func newFileRegion(ff *FormattedFile, change GLChangeData) *FileRegion {
 		newPath: change.NewPath,
 		added: change.NewFile,
 		removed: change.DeletedFile,
-		collapsed: false,
+		collapsed: change.DeletedFile,
 	}
 
 	inNonAbr := false
