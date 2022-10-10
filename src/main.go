@@ -32,6 +32,7 @@ type FileRegion struct {
 	path           string
 	ff             *FormattedFile
 	lineMap        []int
+	collapsed      bool
 	abrs           []abridgement
 	lineNoColWidth int
 }
@@ -49,15 +50,22 @@ type abridgement struct {
 }
 
 func (f *FileRegion) Height() int {
-	return len(f.lineMap)
+	if f.collapsed {
+		return 1
+	} else {
+		return len(f.lineMap)
+	}
 }
 
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
+
 	if msg.String() == "enter" {
 		if objType == FRAbr {
 			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
 			f.updateLineMap()
+		} else if objType == FRHeader {
+			f.collapsed = !f.collapsed
 		}
 	}
 
@@ -70,14 +78,18 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	}
 
 	view := make([]string, numLines)
-	ln("sL: %d, nL: %d, c: %d", startLine, numLines, cursor)
+
+	ecSymbol := "▼"
+	if f.collapsed {
+		ecSymbol = "▶"
+	}
 
 	// Render the file header
 	view[0] = gloss.NewStyle().
 		Width(m.w).
 		Background(gloss.Color("#b9c902")).
 		Foreground(gloss.Color("#000")).
-		Render(fmt.Sprintf(" ▼ %s", f.path))
+		Render(fmt.Sprintf(" %s %s", ecSymbol, f.path))
 
 	// Start from 1 to ignore space for header 
 	for i := 1; i < numLines; i++ {
@@ -179,6 +191,7 @@ func newFileRegion(ff *FormattedFile, path string) *FileRegion {
 	region := FileRegion{
 		ff: ff,
 		path: path,
+		collapsed: false,
 	}
 
 	inNonAbr := false
