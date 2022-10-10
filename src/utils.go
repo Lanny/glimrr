@@ -28,3 +28,7 @@ func GetLineNoColWidth(ff *FormattedFile) int {
 	maxLineNo := Max(lastLine.aNum, lastLine.bNum)
 	return int(math.Log10(float64(maxLineNo)) + 1.0)
 }
+
+func DivMod(numerator int, denominator int) (q int, r int) {
+    return numerator / denominator, numerator % denominator
+}

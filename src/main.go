@@ -19,6 +19,24 @@ var bgColorMap = [...]string{
 	"#744",
 }
 
+const NUM_FR_TYPES = 4
+
+const (
+	FRLine   int = 0
+	FRHeader     = 1
+	FRAbr        = 2
+	FRComment    = 3
+)
+
+type FileRegion struct {
+	path           string
+	ff             *FormattedFile
+	lineMap        []int
+	abrs           []abridgement
+	lineNoColWidth int
+}
+
+
 func jankLog(msg string) {
 	f, err := tea.LogToFile("debug.log", "debug")
 	if err != nil {
@@ -27,6 +45,11 @@ func jankLog(msg string) {
 	}
 	f.WriteString(msg)
 	defer f.Close()
+}
+
+func ln(msg string, rest ...any) {
+	formatted := fmt.Sprintf(msg, rest...)
+	jankLog(formatted + "\n")
 }
 
 type VRegion interface {
@@ -41,24 +64,15 @@ type abridgement struct {
 	end   int
 }
 
-type FileRegion struct {
-	path           string
-	ff             *FormattedFile
-	lineMap        []int
-	abrs           []abridgement
-	lineNoColWidth int
-}
-
 func (f *FileRegion) Height() int {
-	return len(f.lineMap) + 1
+	return len(f.lineMap)
 }
 
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
+	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
 	if msg.String() == "enter" {
-		lineIdx := f.lineMap[cursor-1]
-		if lineIdx < 0 {
-			abrIdx := (-lineIdx) - 1
-			f.abrs = append(f.abrs[:abrIdx], f.abrs[abrIdx+1:]...)
+		if objType == FRAbr {
+			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
 			f.updateLineMap()
 		}
 	}
@@ -72,20 +86,24 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 	}
 
 	view := make([]string, numLines)
+	ln("sL: %d, nL: %d, c: %d", startLine, numLines, cursor)
+
+	// Render the file header
 	view[0] = gloss.NewStyle().
 		Width(m.w).
 		Background(gloss.Color("#b9c902")).
 		Foreground(gloss.Color("#000")).
 		Render(fmt.Sprintf(" ▼ %s", f.path))
 
+	// Start from 1 to ignore space for header 
 	for i := 1; i < numLines; i++ {
-		lineIdx := f.lineMap[startLine+i-1]
+		objIdx, objType := DivMod(f.lineMap[startLine+i], NUM_FR_TYPES)
 		isCursor := i+startLine == cursor
 
-		if lineIdx >= 0 {
-			line := f.ff.lines[lineIdx]
+		if objType == FRLine{
+			line := f.ff.lines[objIdx]
 			view[i] = f.renderLine(line, isCursor, m)
-		} else {
+		} else if objType == FRAbr {
 			var bgColor gloss.Color
 			if isCursor {
 				bgColor = gloss.Color(bgColorMap[4])
@@ -98,6 +116,11 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Align(gloss.Center).
 				Background(bgColor).
 				Render("...")
+		} else {
+			view[i] = gloss.NewStyle().
+				Width(m.w).
+				Background(gloss.Color(bgColorMap[0])).
+				Render("Whoops!")
 		}
 	}
 
@@ -150,18 +173,20 @@ func (f *FileRegion) FullyExpand() {
 
 
 func (f *FileRegion) updateLineMap() {
-	f.lineMap = make([]int, 0)
-	idx := 0
+	f.lineMap = make([]int, 1)
+	lineIdx := 0
 	abrIdx := 0
 
-	for idx < len(f.ff.lines) {
-		if abrIdx < len(f.abrs) && idx == f.abrs[abrIdx].start {
-			f.lineMap = append(f.lineMap, -(abrIdx+1))
-			idx = f.abrs[abrIdx].end + 1
+	f.lineMap[0] = FRHeader
+
+	for lineIdx < len(f.ff.lines) {
+		if abrIdx < len(f.abrs) && lineIdx == f.abrs[abrIdx].start {
+			f.lineMap = append(f.lineMap, (abrIdx * NUM_FR_TYPES) + FRAbr)
+			lineIdx = f.abrs[abrIdx].end + 1
 			abrIdx++
 		} else {
-			f.lineMap = append(f.lineMap, idx)
-			idx++
+			f.lineMap = append(f.lineMap, (lineIdx * NUM_FR_TYPES) + FRLine)
+			lineIdx++
 		}
 	}
 }
@@ -304,12 +329,16 @@ func (m Model) View() string {
 		cumY += rH
 	}
 
+	if len(parts) > m.h {
+		ln("Warning: Viewport height it %d but view is %d lines high", m.h, len(parts))
+	}
 
 	background := gloss.Color(bgColorMap[0])
 	return gloss.NewStyle().
 		Width(m.w).
 		Height(m.h).
 		MaxWidth(m.w).
+		MaxHeight(m.h).
 		Background(background).
 		Render(strings.Join(parts, "\n"))
 }
