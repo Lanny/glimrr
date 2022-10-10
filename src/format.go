@@ -88,18 +88,18 @@ func Highlight(s string, baseLexer chroma.Lexer) ([][]UnRenderedToken, error) {
 	return ret, nil
 }
 
-func FormatFile(base string, diff string, filename string) (*FormattedFile, error) {
+func FormatFile(base string, change GLChangeData) (*FormattedFile, error) {
 	var formattedFile FormattedFile
 	var lexer chroma.Lexer
 
-	df, err := AnnotateWithDiff(base, diff)
+	df, err := AnnotateWithDiff(base, change.Diff, change.DeletedFile)
 	if err != nil {
 		return nil, err
 	}
 
 	baseStr, targStr := ReconstituteDiff(df)
 
-	lexer = lexers.Match(filename)
+	lexer = lexers.Match(change.NewPath)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}

@@ -36,22 +36,6 @@ type FileRegion struct {
 	lineNoColWidth int
 }
 
-
-func jankLog(msg string) {
-	f, err := tea.LogToFile("debug.log", "debug")
-	if err != nil {
-		fmt.Println("fatal:", err)
-		os.Exit(1)
-	}
-	f.WriteString(msg)
-	defer f.Close()
-}
-
-func ln(msg string, rest ...any) {
-	formatted := fmt.Sprintf(msg, rest...)
-	jankLog(formatted + "\n")
-}
-
 type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
@@ -137,21 +121,21 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 
 	if line.mode == UNCHANGED {
 		lineContent = fmt.Sprintf(
-			"%*d %*d  %s",
+			"%*d %*d   %s",
 			f.lineNoColWidth, line.aNum,
 			f.lineNoColWidth, line.bNum,
 			line.Render(background),
 		)
 	} else if line.mode == ADDED {
 		lineContent = fmt.Sprintf(
-			"%*s %*d +%s",
+			"%*s %*d + %s",
 			f.lineNoColWidth, "",
 			f.lineNoColWidth, line.bNum,
 			line.Render(background),
 		)
 	} else {
 		lineContent = fmt.Sprintf(
-			"%*d %*s -%s",
+			"%*d %*s - %s",
 			f.lineNoColWidth, line.aNum,
 			f.lineNoColWidth, "",
 			line.Render(background),
@@ -408,7 +392,7 @@ func NewModel() Model {
 					baseContent = ""
 				}
 
-				ff, err := FormatFile(baseContent, msg.change.Diff, msg.change.NewPath)
+				ff, err := FormatFile(baseContent, msg.change)
 				if err != nil {
 					panic(err)
 				}

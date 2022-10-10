@@ -112,16 +112,30 @@ func parseHunks(diffLines []string) ([]*Hunk, error) {
 	return hunks, nil
 }
 
-func AnnotateWithDiff(base string, diff string) (*DiffFile, error) {
+func AnnotateWithDiff(base string, diff string, deleted bool) (*DiffFile, error) {
 	var nextHunk *Hunk
 	var diffFile DiffFile
 
-	baseLines := strings.Split(base, "\n")
-	hunks, err := parseHunks(strings.Split(diff, "\n"))
 	aLine := 1
 	bLine := 1
-	hunkIdx := 0
+	baseLines := strings.Split(base, "\n")
 
+	if deleted {
+		diffFile.lines = make([]*DiffLine, len(baseLines))
+		for idx, line := range baseLines {
+			diffFile.lines[idx] = &DiffLine{
+				text: line,
+				mode: REMOVED,
+				aNum: idx + 1,
+				bNum: 1,
+			}
+		}
+
+		return &diffFile, nil
+	}
+
+	hunkIdx := 0
+	hunks, err := parseHunks(strings.Split(diff, "\n"))
 	if err != nil {
 		return nil, err
 	}
