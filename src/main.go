@@ -295,6 +295,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, region := range m.regions {
 				region.FullyExpand()
 			}
+		case "G":
+			totalHeight := m.totalHeight()
+			m.y = totalHeight-m.h
+			m.cursor = totalHeight-1
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
 			m.y = Min(m.y+(m.h+1)/2, totalHeight-m.h)
