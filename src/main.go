@@ -297,7 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
-			m.y = Min(m.y+(m.h+1)/2, totalHeight-1-m.h)
+			m.y = Min(m.y+(m.h+1)/2, totalHeight-m.h)
 			m.cursor = Min(m.cursor+(m.h+1)/2, totalHeight-1)
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
