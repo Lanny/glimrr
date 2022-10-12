@@ -210,7 +210,7 @@ func newFileRegion(ff *FormattedFile, change GLChangeData) *FileRegion {
 		collapsed: change.DeletedFile,
 	}
 
-	inNonAbr := false
+	inNonAbr := ff.lines[0].mode != UNCHANGED
 	lastNonAbrEnd := 0
 	linesWithoutChange := 0
 
