@@ -1,10 +1,10 @@
 package main
 
 import (
-	"math"
 	"fmt"
-	"os"
 	tea "github.com/charmbracelet/bubbletea"
+	"math"
+	"os"
 )
 
 func Min(x, y int) int {
@@ -33,7 +33,7 @@ func GetLineNoColWidth(ff *FormattedFile) int {
 }
 
 func DivMod(numerator int, denominator int) (q int, r int) {
-    return numerator / denominator, numerator % denominator
+	return numerator / denominator, numerator % denominator
 }
 
 func jankLog(msg string) {
@@ -50,4 +50,3 @@ func ln(msg string, rest ...any) {
 	formatted := fmt.Sprintf(msg, rest...)
 	jankLog(formatted + "\n")
 }
-

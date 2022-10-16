@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
+	gloss "github.com/charmbracelet/lipgloss"
 	"os"
 	"strings"
 	"sync"
-	tea "github.com/charmbracelet/bubbletea"
-	gloss "github.com/charmbracelet/lipgloss"
 )
 
 var bgColorMap = [...]string{
@@ -22,24 +22,25 @@ var bgColorMap = [...]string{
 const NUM_FR_TYPES = 4
 
 const (
-	FRLine   int = 0
-	FRHeader     = 1
-	FRAbr        = 2
-	FRComment    = 3
+	FRLine    int = 0
+	FRHeader      = 1
+	FRAbr         = 2
+	FRComment     = 3
 )
 
 type FileRegion struct {
-	ff             *FormattedFile
+	ff *FormattedFile
 
-	oldPath        string
-	newPath        string
-	added          bool
-	removed        bool
+	oldPath string
+	newPath string
+	added   bool
+	removed bool
 
-	collapsed      bool
+	collapsed bool
 
 	lineMap        []int
 	abrs           []abridgement
+	notes          []GLNote
 	lineNoColWidth int
 }
 
@@ -104,12 +105,12 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 		Foreground(gloss.Color("#000")).
 		Render(fmt.Sprintf(" %s %s%s", ecSymbol, f.newPath, modeString))
 
-	// Start from 1 to ignore space for header 
+	// Start from 1 to ignore space for header
 	for i := 1; i < numLines; i++ {
 		objIdx, objType := DivMod(f.lineMap[startLine+i], NUM_FR_TYPES)
 		isCursor := i+startLine == cursor
 
-		if objType == FRLine{
+		if objType == FRLine {
 			line := f.ff.lines[objIdx]
 			view[i] = f.renderLine(line, isCursor, m)
 		} else if objType == FRAbr {
@@ -180,40 +181,68 @@ func (f *FileRegion) FullyExpand() {
 	f.updateLineMap()
 }
 
-
 func (f *FileRegion) updateLineMap() {
 	f.lineMap = make([]int, 1)
 	lineIdx := 0
 	abrIdx := 0
+	noteIndex := make(map[string]int)
+
+	for nidx, note := range f.notes {
+		var key string
+		if note.Position.NewLine == 0 {
+			key = fmt.Sprintf("-%d", note.Position.OldLine)
+		} else if note.Position.OldLine == 0 {
+			key = fmt.Sprintf("+%d", note.Position.NewLine)
+		} else {
+			key = fmt.Sprintf(" %d_%d", note.Position.NewLine, note.Position.OldLine)
+		}
+
+		noteIndex[key] = nidx
+	}
 
 	f.lineMap[0] = FRHeader
 
 	for lineIdx < len(f.ff.lines) {
 		if abrIdx < len(f.abrs) && lineIdx == f.abrs[abrIdx].start {
-			f.lineMap = append(f.lineMap, (abrIdx * NUM_FR_TYPES) + FRAbr)
+			f.lineMap = append(f.lineMap, (abrIdx*NUM_FR_TYPES)+FRAbr)
 			lineIdx = f.abrs[abrIdx].end + 1
 			abrIdx++
 		} else {
-			f.lineMap = append(f.lineMap, (lineIdx * NUM_FR_TYPES) + FRLine)
+			f.lineMap = append(f.lineMap, (lineIdx*NUM_FR_TYPES)+FRLine)
+			var key string
+			formattedLine := f.ff.lines[lineIdx]
+
+			if formattedLine.mode == ADDED {
+				key = fmt.Sprintf("+%d", formattedLine.bNum)
+			} else if formattedLine.mode == REMOVED {
+				key = fmt.Sprintf("-%d", formattedLine.aNum)
+			} else {
+				key = fmt.Sprintf(" %d_%d", formattedLine.bNum, formattedLine.aNum)
+			}
+
+			if nidx, ok := noteIndex[key]; ok {
+				f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
+			}
+
 			lineIdx++
 		}
 	}
 }
 
-func newFileRegion(ff *FormattedFile, change GLChangeData) *FileRegion {
+func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote) *FileRegion {
 	region := FileRegion{
-		ff: ff,
-		oldPath: change.OldPath,
-		newPath: change.NewPath,
-		added: change.NewFile,
-		removed: change.DeletedFile,
+		ff:        ff,
+		oldPath:   change.OldPath,
+		newPath:   change.NewPath,
+		added:     change.NewFile,
+		removed:   change.DeletedFile,
 		collapsed: change.DeletedFile,
+		notes:     notes,
 	}
 
 	inNonAbr := ff.lines[0].mode != UNCHANGED
 	lastNonAbrEnd := 0
 	linesWithoutChange := 0
-
 
 	for idx, line := range ff.lines {
 		if line.mode == UNCHANGED {
@@ -249,12 +278,12 @@ func newFileRegion(ff *FormattedFile, change GLChangeData) *FileRegion {
 }
 
 type Model struct {
-	cursor         int
-	w              int
-	h              int
-	x              int
-	y              int
-	regions        []VRegion
+	cursor  int
+	w       int
+	h       int
+	x       int
+	y       int
+	regions []VRegion
 }
 
 func (m Model) Init() tea.Cmd {
@@ -297,8 +326,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "G":
 			totalHeight := m.totalHeight()
-			m.y = totalHeight-m.h
-			m.cursor = totalHeight-1
+			m.y = totalHeight - m.h
+			m.cursor = totalHeight - 1
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
 			m.y = Min(m.y+(m.h+1)/2, totalHeight-m.h)
@@ -324,21 +353,21 @@ func (m Model) View() string {
 	for _, region := range m.regions {
 		rH := region.Height()
 
-		if cumY > m.y + m.h {
+		if cumY > m.y+m.h {
 			// Got enough lines to paint a screen
 			break
 		}
 
-		if cumY + rH < m.y {
+		if cumY+rH < m.y {
 			// Region is out of viewport
 			cumY += rH
 			continue
 		}
 
-		startLine := Max(m.y - cumY, 0)
-		linesToRender := Min(Min(rH - startLine, m.y + m.h - cumY), m.h)
+		startLine := Max(m.y-cumY, 0)
+		linesToRender := Min(Min(rH-startLine, m.y+m.h-cumY), m.h)
 		cursor := m.cursor - cumY
-		if m.cursor > cumY + rH || m.cursor < cumY {
+		if m.cursor > cumY+rH || m.cursor < cumY {
 			cursor = -1
 		}
 
@@ -366,7 +395,7 @@ func (m Model) getCursorTarget() (VRegion, int) {
 	for _, region := range m.regions {
 		rH := region.Height()
 
-		if m.cursor < cumY + rH && m.cursor >= cumY {
+		if m.cursor < cumY+rH && m.cursor >= cumY {
 			return region, m.cursor - cumY
 		}
 		cumY += rH
@@ -401,6 +430,17 @@ func NewModel() Model {
 		panic(err)
 	}
 
+	// Partion notes by file that they apply to
+	notesByFile := make(map[string]([]GLNote))
+	for _, discussion := range mrData.Discussions {
+		for _, note := range discussion.Notes {
+			if note.Type == "DiffNote" {
+				path := note.Position.NewPath
+				notesByFile[path] = append(notesByFile[path], note)
+			}
+		}
+	}
+
 	var wg sync.WaitGroup
 	regions := make([]VRegion, len(mrData.Changes))
 	q := make(chan CreateFileRegionMsg, 8)
@@ -430,7 +470,13 @@ func NewModel() Model {
 					panic(err)
 				}
 
-				regions[msg.idx] = newFileRegion(ff, msg.change)
+				var notes []GLNote
+				var ok bool
+				if notes, ok = notesByFile[msg.change.NewPath]; !ok {
+					notes = nil
+				}
+
+				regions[msg.idx] = newFileRegion(ff, msg.change, notes)
 			}
 			wg.Done()
 		}()
@@ -439,10 +485,10 @@ func NewModel() Model {
 
 	for idx, change := range mrData.Changes {
 		q <- CreateFileRegionMsg{
-			idx: idx,
-			pid: pid,
+			idx:    idx,
+			pid:    pid,
 			change: change,
-			ref: mrData.DiffRefs.BaseSHA,
+			ref:    mrData.DiffRefs.BaseSHA,
 		}
 	}
 	close(q)
@@ -450,8 +496,8 @@ func NewModel() Model {
 
 	model := Model{
 		regions: regions,
-		w: 80,
-		h: 24,
+		w:       80,
+		h:       24,
 	}
 	return model
 

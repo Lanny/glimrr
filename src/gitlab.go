@@ -1,22 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"strings"
-	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 )
 
 type GLChangeData struct {
 	OldPath     string `json:"old_path"`
 	NewPath     string `json:"new_path"`
 	Diff        string
-	NewFile     bool   `json:"new_file"`
-	RenamedFile bool   `json:"renamed_file"`
-	DeletedFile bool   `json:"deleted_file"`
+	NewFile     bool `json:"new_file"`
+	RenamedFile bool `json:"renamed_file"`
+	DeletedFile bool `json:"deleted_file"`
 }
 
 type GLDiffRefs struct {
@@ -25,14 +25,46 @@ type GLDiffRefs struct {
 	StartSHA string `json:"start_sha"`
 }
 
+type GLAuthor struct {
+	Id       int    `json:"id"`
+	Name     string `json:"name"`
+	Username string `json:"username"`
+}
+
+type GLPosition struct {
+	BaseSHA      string `json:"base_sha"`
+	HeadSHA      string `json:"head_sha"`
+	StartSHA     string `json:"start_sha"`
+	PositionType string `json:"position_type"`
+	OldLine      int    `json:"old_line"`
+	NewLine      int    `json:"new_line"`
+	NewPath      string `json:"new_path"`
+	OldPath      string `json:"old_path"`
+}
+
+type GLNote struct {
+	Id        int        `json:"id"`
+	Type      string     `json:"type"`
+	Body      string     `json:"body"`
+	CreatedAt string     `json:"created_at"`
+	UpdatedAt string     `json:"updated_at"`
+	Position  GLPosition `json:"position"`
+}
+
+type GLDiscussion struct {
+	Id    string   `json:"id"`
+	Notes []GLNote `json:"notes"`
+}
+
 type GLMRData struct {
 	Title        string
 	CreatedAt    string `json:"created_at"`
 	State        string
-	TargetBranch string `json:"target_branch"`
-	SourceBranch string `json:"source_branch"`
-	Changes      []GLChangeData
-	DiffRefs     GLDiffRefs `json:"diff_refs"`
+	TargetBranch string         `json:"target_branch"`
+	SourceBranch string         `json:"source_branch"`
+	Changes      []GLChangeData `json:"changes"`
+	DiffRefs     GLDiffRefs     `json:"diff_refs"`
+	Discussions  []GLDiscussion
 }
 
 type GLInstance struct {
@@ -88,14 +120,22 @@ func (gl *GLInstance) Init() {
 }
 
 func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
+	var parsedData GLMRData
+
 	url := fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/changes", strings.TrimSuffix(gl.apiUrl, "/"), pid, mrid)
 	body, err := gl.get(url)
 	if err != nil {
 		return nil, err
 	}
 
-	var parsedData GLMRData
 	json.Unmarshal(body, &parsedData)
+
+	url = fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/discussions", strings.TrimSuffix(gl.apiUrl, "/"), pid, mrid)
+	body, err = gl.get(url)
+	if err != nil {
+		return nil, err
+	}
+	json.Unmarshal(body, &(parsedData.Discussions))
 
 	return &parsedData, nil
 }
