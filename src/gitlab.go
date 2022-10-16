@@ -59,17 +59,18 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
-		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
+		if resp.StatusCode != 200 {
+			ln("Response body for request to %s:\n```\n%s\n```", url, string(body))
+			return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
+		}
 
 		gl.cache[url] = body
 		serializedCache, err := json.Marshal(gl.cache)
-		os.WriteFile("glimmrCache.json", serializedCache, 0644)
+		os.WriteFile("glimrrCache.json", serializedCache, 0644)
 
 		return body, nil
 	}

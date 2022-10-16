@@ -442,7 +442,7 @@ func NewModel() Model {
 			idx: idx,
 			pid: pid,
 			change: change,
-			ref: mrData.TargetBranch,
+			ref: mrData.DiffRefs.BaseSHA,
 		}
 	}
 	close(q)
