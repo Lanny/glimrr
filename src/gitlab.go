@@ -44,6 +44,7 @@ type GLPosition struct {
 
 type GLNote struct {
 	Id        int        `json:"id"`
+	Author    GLAuthor   `json:"author"`
 	Type      string     `json:"type"`
 	Body      string     `json:"body"`
 	CreatedAt string     `json:"created_at"`

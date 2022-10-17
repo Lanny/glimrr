@@ -126,6 +126,21 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Align(gloss.Center).
 				Background(bgColor).
 				Render("...")
+		} else if objType == FRComment {
+			note := f.notes[objIdx]
+			margin := f.lineNoColWidth * 2 + 2
+
+			block := gloss.NewStyle().
+				Background(gloss.Color("#444")).
+				Width(m.w - margin - 1).
+				MarginLeft(margin).
+				Padding(0, 2).
+				Border(gloss.NormalBorder(), false, false, false, true).
+				BorderForeground(gloss.Color("#FFF")).
+				BorderBackground(gloss.Color("#444")).
+				Render(note.Author.Name + ":\n" + note.Body)
+
+			view[i] = block
 		} else {
 			view[i] = gloss.NewStyle().
 				Width(m.w).
