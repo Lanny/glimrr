@@ -19,13 +19,14 @@ var bgColorMap = [...]string{
 	"#744",
 }
 
-const NUM_FR_TYPES = 4
+const NUM_FR_TYPES = 5
 
 const (
 	FRLine    int = 0
 	FRHeader      = 1
 	FRAbr         = 2
 	FRComment     = 3
+	FRBlank       = 4
 )
 
 type FileRegion struct {
@@ -44,11 +45,36 @@ type FileRegion struct {
 	lineNoColWidth int
 }
 
+type ViewParams struct {
+	x              int
+	width          int
+	lineNoColWidth int
+}
+
+func (n *GLNote) Height(vp *ViewParams) int {
+	return gloss.Height(n.Render(vp))
+}
+
+func (n *GLNote) Render(vp *ViewParams) string {
+	margin := vp.lineNoColWidth * 2 + 2
+	block := gloss.NewStyle().
+		Background(gloss.Color("#444")).
+		Width(vp.width - margin - 1).
+		MarginLeft(margin).
+		Padding(0, 2).
+		Border(gloss.NormalBorder(), false, false, false, true).
+		BorderForeground(gloss.Color("#FFF")).
+		BorderBackground(gloss.Color("#444")).
+		Render(n.Author.Name + ":\n" + n.Body)
+
+	return block
+}
+
 type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
 	View(startLine int, numLines int, cursor int, m *Model) string
-	FullyExpand()
+	FullyExpand(width int)
 }
 
 type abridgement struct {
@@ -66,11 +92,16 @@ func (f *FileRegion) Height() int {
 
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
+	vp := &ViewParams{
+		x: 0,
+		width: m.w,
+		lineNoColWidth: f.lineNoColWidth,
+	}
 
 	if msg.String() == "enter" {
 		if objType == FRAbr {
 			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
-			f.updateLineMap()
+			f.updateLineMap(vp)
 		} else if objType == FRHeader {
 			f.collapsed = !f.collapsed
 		}
@@ -80,6 +111,12 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 }
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
+	vp := &ViewParams{
+		x: 0,
+		width: m.w,
+		lineNoColWidth: f.lineNoColWidth,
+	}
+
 	if numLines < 1 {
 		return ""
 	}
@@ -128,19 +165,14 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Render("...")
 		} else if objType == FRComment {
 			note := f.notes[objIdx]
-			margin := f.lineNoColWidth * 2 + 2
-
-			block := gloss.NewStyle().
-				Background(gloss.Color("#444")).
-				Width(m.w - margin - 1).
-				MarginLeft(margin).
-				Padding(0, 2).
-				Border(gloss.NormalBorder(), false, false, false, true).
-				BorderForeground(gloss.Color("#FFF")).
-				BorderBackground(gloss.Color("#444")).
-				Render(note.Author.Name + ":\n" + note.Body)
-
+			block := note.Render(vp)
 			view[i] = block
+			i += gloss.Height(block) - 1
+		} else if objType == FRBlank {
+			view[i] = gloss.NewStyle().
+				Width(m.w).
+				Background(gloss.Color(bgColorMap[0])).
+				Render(".")
 		} else {
 			view[i] = gloss.NewStyle().
 				Width(m.w).
@@ -191,12 +223,17 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 		Render(lineContent)
 }
 
-func (f *FileRegion) FullyExpand() {
+func (f *FileRegion) FullyExpand(width int) {
+	vp := &ViewParams{
+		x: 0,
+		width: width,
+		lineNoColWidth: f.lineNoColWidth,
+	}
 	f.abrs = f.abrs[:0]
-	f.updateLineMap()
+	f.updateLineMap(vp)
 }
 
-func (f *FileRegion) updateLineMap() {
+func (f *FileRegion) updateLineMap(vp *ViewParams) {
 	f.lineMap = make([]int, 1)
 	lineIdx := 0
 	abrIdx := 0
@@ -237,6 +274,11 @@ func (f *FileRegion) updateLineMap() {
 
 			if nidx, ok := noteIndex[key]; ok {
 				f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
+				note := f.notes[nidx]
+				commentHeight := note.Height(vp)
+				for i := 1; i<commentHeight; i++ {
+					f.lineMap = append(f.lineMap, FRBlank)
+				}
 			}
 
 			lineIdx++
@@ -244,7 +286,7 @@ func (f *FileRegion) updateLineMap() {
 	}
 }
 
-func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote) *FileRegion {
+func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote, width int) *FileRegion {
 	region := FileRegion{
 		ff:        ff,
 		oldPath:   change.OldPath,
@@ -288,7 +330,10 @@ func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote) *File
 	}
 
 	region.lineNoColWidth = GetLineNoColWidth(ff)
-	region.updateLineMap()
+	region.updateLineMap(&ViewParams{
+		lineNoColWidth: region.lineNoColWidth,
+		width: width,
+	})
 	return &region
 }
 
@@ -337,7 +382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "e":
 			for _, region := range m.regions {
-				region.FullyExpand()
+				region.FullyExpand(m.w)
 			}
 		case "G":
 			totalHeight := m.totalHeight()
@@ -445,6 +490,12 @@ func NewModel() Model {
 		panic(err)
 	}
 
+	model := Model{
+		regions: make([]VRegion, len(mrData.Changes)),
+		w:       80,
+		h:       24,
+	}
+
 	// Partion notes by file that they apply to
 	notesByFile := make(map[string]([]GLNote))
 	for _, discussion := range mrData.Discussions {
@@ -457,7 +508,6 @@ func NewModel() Model {
 	}
 
 	var wg sync.WaitGroup
-	regions := make([]VRegion, len(mrData.Changes))
 	q := make(chan CreateFileRegionMsg, 8)
 
 	for i := 0; i < 4; i++ {
@@ -491,7 +541,7 @@ func NewModel() Model {
 					notes = nil
 				}
 
-				regions[msg.idx] = newFileRegion(ff, msg.change, notes)
+				model.regions[msg.idx] = newFileRegion(ff, msg.change, notes, model.w)
 			}
 			wg.Done()
 		}()
@@ -509,11 +559,6 @@ func NewModel() Model {
 	close(q)
 	wg.Wait()
 
-	model := Model{
-		regions: regions,
-		w:       80,
-		h:       24,
-	}
 	return model
 
 }
