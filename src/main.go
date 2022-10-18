@@ -165,9 +165,12 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Render("...")
 		} else if objType == FRComment {
 			note := f.notes[objIdx]
-			block := note.Render(vp)
-			view[i] = block
-			i += gloss.Height(block) - 1
+			blockLines := strings.Split(note.Render(vp), "\n")
+			for _, line := range blockLines {
+				view[i] = line
+				i++
+			}
+			i--
 		} else if objType == FRBlank {
 			view[i] = gloss.NewStyle().
 				Width(m.w).
@@ -237,7 +240,7 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 	f.lineMap = make([]int, 1)
 	lineIdx := 0
 	abrIdx := 0
-	noteIndex := make(map[string]int)
+	noteIndex := make(map[string]([]int))
 
 	for nidx, note := range f.notes {
 		var key string
@@ -249,7 +252,12 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 			key = fmt.Sprintf(" %d_%d", note.Position.NewLine, note.Position.OldLine)
 		}
 
-		noteIndex[key] = nidx
+		if _, ok := noteIndex[key]; !ok {
+			noteIndex[key] = nil
+		}
+
+		noteIndex[key] = append(noteIndex[key], nidx)
+
 	}
 
 	f.lineMap[0] = FRHeader
@@ -272,12 +280,14 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 				key = fmt.Sprintf(" %d_%d", formattedLine.bNum, formattedLine.aNum)
 			}
 
-			if nidx, ok := noteIndex[key]; ok {
-				f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
-				note := f.notes[nidx]
-				commentHeight := note.Height(vp)
-				for i := 1; i<commentHeight; i++ {
-					f.lineMap = append(f.lineMap, FRBlank)
+			if noteIndicies, ok := noteIndex[key]; ok {
+				for _, nidx := range noteIndicies {
+					note := f.notes[nidx]
+					f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
+					commentHeight := note.Height(vp)
+					for i := 1; i<commentHeight; i++ {
+						f.lineMap = append(f.lineMap, FRBlank)
+					}
 				}
 			}
 
