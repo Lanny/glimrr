@@ -52,19 +52,24 @@ type ViewParams struct {
 }
 
 func (n *GLNote) Height(vp *ViewParams) int {
-	return gloss.Height(n.Render(vp))
+	return gloss.Height(n.Render(vp, false))
 }
 
-func (n *GLNote) Render(vp *ViewParams) string {
+func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 	margin := vp.lineNoColWidth * 2 + 2
+	bg := "#444"
+	if cursor {
+		bg = "#666"
+	}
+
 	block := gloss.NewStyle().
-		Background(gloss.Color("#444")).
+		Background(gloss.Color(bg)).
 		Width(vp.width - margin - 1).
 		MarginLeft(margin).
 		Padding(0, 2).
 		Border(gloss.NormalBorder(), false, false, false, true).
 		BorderForeground(gloss.Color("#FFF")).
-		BorderBackground(gloss.Color("#444")).
+		BorderBackground(gloss.Color(bg)).
 		Render(n.Author.Name + ":\n" + n.Body)
 
 	return block
@@ -74,6 +79,7 @@ type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
 	View(startLine int, numLines int, cursor int, m *Model) string
+	GetNextCursorTarget(lineNo int, direction int) int
 	FullyExpand(width int)
 }
 
@@ -165,7 +171,7 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Render("...")
 		} else if objType == FRComment {
 			note := f.notes[objIdx]
-			blockLines := strings.Split(note.Render(vp), "\n")
+			blockLines := strings.Split(note.Render(vp, isCursor), "\n")
 			for _, line := range blockLines {
 				view[i] = line
 				i++
@@ -225,6 +231,29 @@ func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) stri
 		MaxWidth(m.w).
 		Render(lineContent)
 }
+
+func (f *FileRegion) GetNextCursorTarget(lineNo int, direction int) int {
+	i := lineNo
+	d := Signum(direction)
+
+	for {
+		if i >= len(f.lineMap) || i < 0 {
+			d = -d
+			i += d
+			continue
+		}
+
+		_, objType := DivMod(f.lineMap[i], NUM_FR_TYPES)
+		if objType != FRBlank {
+			break
+		}
+
+		i += d
+	}
+
+	return i
+}
+
 
 func (f *FileRegion) FullyExpand(width int) {
 	vp := &ViewParams{
@@ -372,22 +401,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+			(&m).moveCursor(-1)
 
-				if m.cursor < m.y {
-					m.y = m.cursor
-				}
+			if m.cursor < m.y {
+				m.y = m.cursor
 			}
 
 		case "down", "j":
-			totalHeight := m.totalHeight()
-			if m.cursor < totalHeight-1 {
-				m.cursor++
-
-				if m.cursor >= m.y+m.h {
-					m.y = m.cursor - m.h + 1
-				}
+			(&m).moveCursor(1)
+			if m.cursor >= m.y+m.h {
+				m.y = m.cursor - m.h + 1
 			}
 
 		case "e":
@@ -401,12 +424,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
 			m.y = Min(m.y+(m.h+1)/2, totalHeight-m.h)
-			m.cursor = Min(m.cursor+(m.h+1)/2, totalHeight-1)
+			(&m).moveCursor((m.h+1)/2)
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
-			m.cursor = Max(m.cursor-m.h/2, 0)
+			(&m).moveCursor(-(m.h+1)/2)
 		default:
-			region, relCursor := m.getCursorTarget()
+			region, relCursor := m.getCursorTarget(m.cursor)
 			cmd := region.Update(&m, msg, relCursor)
 			return m, cmd
 		}
@@ -414,6 +437,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	jankLog(fmt.Sprintf("c: %d, y: %d\n", m.cursor, m.y))
 
 	return m, nil
+}
+
+func (m *Model) moveCursor(delta int) {
+	totalHeight := m.totalHeight()
+	prospective := Clamp(0, m.cursor + delta, totalHeight - 1)
+	region, relCursor := m.getCursorTarget(prospective)
+	relTarget := region.GetNextCursorTarget(relCursor, delta)
+	pTDelta := relTarget - relCursor
+
+	m.cursor = prospective + pTDelta
 }
 
 func (m Model) View() string {
@@ -459,14 +492,14 @@ func (m Model) View() string {
 		Render(strings.Join(parts, "\n"))
 }
 
-func (m Model) getCursorTarget() (VRegion, int) {
+func (m Model) getCursorTarget(cursor int) (VRegion, int) {
 	cumY := 0
 
 	for _, region := range m.regions {
 		rH := region.Height()
 
-		if m.cursor < cumY+rH && m.cursor >= cumY {
-			return region, m.cursor - cumY
+		if cursor < cumY+rH && cursor >= cumY {
+			return region, cursor - cumY
 		}
 		cumY += rH
 	}

@@ -21,6 +21,18 @@ func Max(x, y int) int {
 	return y
 }
 
+func Clamp(x, n, y int) int {
+	return Max(x, Min(y, n))
+}
+
+func Signum(x int) int {
+	if x < 0 {
+		return -1
+	} else {
+		return 1
+	}
+}
+
 func GetLineNoColWidth(ff *FormattedFile) int {
 	count := len(ff.lines)
 	if count < 1 {
