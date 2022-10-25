@@ -110,9 +110,10 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 }
 
 func (gl *GLInstance) Init() {
-	seralizedCache, err := os.ReadFile("glimmrCache.json")
+	seralizedCache, err := os.ReadFile("glimrrCache.json")
 	if err != nil {
-		jankLog("Unable to restore cache, creating empty.\n")
+		ln("Unable to restore cache, creating empty.")
+		ln("Error: %s", err.Error())
 		gl.cache = make(map[string]([]byte))
 	} else {
 		jankLog("Restoring cache from file.\n")
