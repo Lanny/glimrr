@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 )
@@ -116,6 +117,16 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 
 	case "t":
 		f.collapsed = !f.collapsed
+	case "c":
+		return func() tea.Msg {
+			m.p.ReleaseTerminal()
+			cmd := exec.Command("/usr/bin/vi", "/Users/ryan.jenkins/glimrr/src/utils.go")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Run()
+			m.p.RestoreTerminal()
+			return nil
+		}
 	}
 
 	return nil
@@ -388,6 +399,7 @@ type Model struct {
 	x       int
 	y       int
 	regions []VRegion
+	p       *tea.Program
 }
 
 func (m Model) Init() tea.Cmd {
@@ -614,10 +626,13 @@ func NewModel() Model {
 func main() {
 	jankLog("\n\n====== NEW RUN ======\n\n")
 	model := NewModel()
-	p := tea.NewProgram(model)
+	mp := &model
+	program := tea.NewProgram(mp)
+	mp.p = program
 
 	model.Init()
-	if err := p.Start(); err != nil {
+
+	if err := program.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}

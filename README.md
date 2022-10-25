@@ -8,6 +8,12 @@ Glimrr is a TUI for conducting gitlab merge request reviews at the terminal. It 
 
 To allow glimrr to access and modify merge requests, set the `GLIMRR_TOKEN` environment variable.
 
+To build and run:
+
+```
+go build -o glimrr ./src && ./glimrr
+```
+
 For an auto-reloading dev setup, run:
 
 ```
