@@ -119,11 +119,29 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		f.collapsed = !f.collapsed
 	case "c":
 		return func() tea.Msg {
+			tmpFile, err := os.CreateTemp("", "new-comment-*.md")
+			if err != nil {
+				panic("Unable to open file for creating a new comment.")
+			}
+
+			fname := tmpFile.Name()
+			defer os.Remove(fname)
+
 			m.p.ReleaseTerminal()
-			cmd := exec.Command("/usr/bin/vi", "/Users/ryan.jenkins/glimrr/src/utils.go")
+
+			cmd := exec.Command("/usr/bin/vi", fname)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Run()
+
+			commentBody, err := os.ReadFile(fname)
+
+			if err != nil {
+				ln("Unable to read comment temp file!")
+			} else {
+				ln("Successfully collected comment:\n%s", commentBody)
+			}
+
 			m.p.RestoreTerminal()
 			return nil
 		}
