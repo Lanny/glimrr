@@ -104,13 +104,18 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		lineNoColWidth: f.lineNoColWidth,
 	}
 
-	if msg.String() == "enter" {
+
+	switch msg.String() {
+	case "enter":
 		if objType == FRAbr {
 			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
 			f.updateLineMap(vp)
 		} else if objType == FRHeader {
 			f.collapsed = !f.collapsed
 		}
+
+	case "t":
+		f.collapsed = !f.collapsed
 	}
 
 	return nil
