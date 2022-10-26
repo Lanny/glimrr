@@ -118,33 +118,68 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	case "t":
 		f.collapsed = !f.collapsed
 	case "c":
-		return func() tea.Msg {
-			tmpFile, err := os.CreateTemp("", "new-comment-*.md")
-			if err != nil {
-				panic("Unable to open file for creating a new comment.")
-			}
-
-			fname := tmpFile.Name()
-			defer os.Remove(fname)
-
-			m.p.ReleaseTerminal()
-
-			cmd := exec.Command("/usr/bin/vi", fname)
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Run()
-
-			commentBody, err := os.ReadFile(fname)
-
-			if err != nil {
-				ln("Unable to read comment temp file!")
-			} else {
-				ln("Successfully collected comment:\n%s", commentBody)
-			}
-
-			m.p.RestoreTerminal()
+		if objType != FRLine {
 			return nil
 		}
+
+		tmpFile, err := os.CreateTemp("", "new-comment-*.md")
+		if err != nil {
+			panic("Unable to open file for creating a new comment.")
+		}
+
+		fname := tmpFile.Name()
+		defer os.Remove(fname)
+
+		m.p.ReleaseTerminal()
+
+		cmd := exec.Command("/usr/bin/vi", fname)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+
+		commentBody, err := os.ReadFile(fname)
+
+		if err != nil {
+			ln("Unable to read comment temp file!")
+			return nil
+		}
+		ln("Successfully collected comment:\n%s", commentBody)
+
+		line := f.ff.lines[objIdx]
+		var oldLineNo int
+		var newLineNo int
+
+		if line.mode != ADDED {
+			oldLineNo = line.aNum
+		}
+
+		if line.mode != REMOVED {
+			newLineNo = line.bNum
+		}
+
+		draftNote := GLNote{
+			Id: -1,
+			Type: "DiffNote",
+			Body: string(commentBody),
+			Author: GLAuthor{
+				Id: -1,
+				Name: "(you)",
+				Username: "(you)",
+			},
+			Position: GLPosition{
+				PositionType: "text",
+				OldPath: f.oldPath,
+				NewPath: f.newPath,
+				OldLine: oldLineNo,
+				NewLine: newLineNo,
+			},
+		}
+		f.notes = append(f.notes, draftNote)
+
+
+		m.p.RestoreTerminal()
+		f.updateLineMap(vp)
+		return nil
 	}
 
 	return nil
