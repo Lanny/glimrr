@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"strings"
-	"os"
-	"os/exec"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
+	"os"
+	"os/exec"
+	"strings"
 )
 
 const NUM_FR_TYPES = 5
@@ -18,7 +18,6 @@ const (
 	FRComment     = 3
 	FRBlank       = 4
 )
-
 
 type FileRegion struct {
 	ff *FormattedFile
@@ -47,11 +46,10 @@ func (f *FileRegion) Height() int {
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
 	vp := &ViewParams{
-		x: 0,
-		width: m.w,
+		x:              0,
+		width:          m.w,
 		lineNoColWidth: f.lineNoColWidth,
 	}
-
 
 	switch msg.String() {
 	case "enter":
@@ -105,20 +103,20 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		}
 
 		draftNote := GLNote{
-			Id: -1,
+			Id:   -1,
 			Type: "DiffNote",
 			Body: string(commentBody),
 			Author: GLAuthor{
-				Id: -1,
-				Name: "(you)",
+				Id:       -1,
+				Name:     "(you)",
 				Username: "(you)",
 			},
 			Position: GLPosition{
 				PositionType: "text",
-				OldPath: f.oldPath,
-				NewPath: f.newPath,
-				OldLine: oldLineNo,
-				NewLine: newLineNo,
+				OldPath:      f.oldPath,
+				NewPath:      f.newPath,
+				OldLine:      oldLineNo,
+				NewLine:      newLineNo,
 			},
 		}
 		f.notes = append(f.notes, draftNote)
@@ -133,8 +131,8 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
 	vp := &ViewParams{
-		x: 0,
-		width: m.w,
+		x:              0,
+		width:          m.w,
 		lineNoColWidth: f.lineNoColWidth,
 	}
 
@@ -269,7 +267,6 @@ func (f *FileRegion) GetNextCursorTarget(lineNo int, direction int) int {
 	return i
 }
 
-
 func (f *FileRegion) SetECState(value bool) {
 	f.collapsed = value
 }
@@ -323,7 +320,7 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 					note := f.notes[nidx]
 					f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
 					commentHeight := note.Height(vp)
-					for i := 1; i<commentHeight; i++ {
+					for i := 1; i < commentHeight; i++ {
 						f.lineMap = append(f.lineMap, FRBlank)
 					}
 				}
@@ -380,7 +377,7 @@ func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote, width
 	region.lineNoColWidth = GetLineNoColWidth(ff)
 	region.updateLineMap(&ViewParams{
 		lineNoColWidth: region.lineNoColWidth,
-		width: width,
+		width:          width,
 	})
 	return &region
 }

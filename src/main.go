@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"time"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/bubbles/textinput"
 	"os"
 	"strings"
 	"sync"
@@ -20,12 +22,10 @@ var bgColorMap = [...]string{
 	"#744",
 }
 
-
 const (
 	NormalMode int = 0
 	ExMode         = 1
 )
-
 
 type ViewParams struct {
 	x              int
@@ -38,7 +38,7 @@ func (n *GLNote) Height(vp *ViewParams) int {
 }
 
 func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
-	margin := vp.lineNoColWidth * 2 + 2
+	margin := vp.lineNoColWidth*2 + 2
 	bg := "#444"
 	if cursor {
 		bg = "#666"
@@ -46,7 +46,7 @@ func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 
 	block := gloss.NewStyle().
 		Background(gloss.Color(bg)).
-		Width(vp.width - margin - 1).
+		Width(vp.width-margin-1).
 		MarginLeft(margin).
 		Padding(0, 2).
 		Border(gloss.NormalBorder(), false, false, false, true).
@@ -70,17 +70,18 @@ type abridgement struct {
 	end   int
 }
 
-
 type Model struct {
-	cursor  int
-	w       int
-	h       int
-	x       int
-	y       int
-	mode    int
-	exInput textinput.Model
-	regions []VRegion
-	p       *tea.Program
+	cursor      int
+	w           int
+	h           int
+	x           int
+	y           int
+	mode        int
+	loadingText string
+	spinner     spinner.Model
+	exInput     textinput.Model
+	regions     []VRegion
+	p           *tea.Program
 }
 
 func (m Model) Init() tea.Cmd {
@@ -88,7 +89,18 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.mode == NormalMode {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case EndLoadingMsg:
+		ln("%v", msg)
+		m.loadingText = ""
+	}
+
+	if m.loadingText != "" {
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	} else if m.mode == NormalMode {
 		return m.nUpdate(msg)
 	} else if m.mode == ExMode {
 		return m.eUpdate(msg)
@@ -129,10 +141,10 @@ func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+d":
 			totalHeight := m.totalHeight()
 			m.y = Min(m.y+(m.h+1)/2, totalHeight-m.h)
-			(&m).moveCursor((m.h+1)/2)
+			(&m).moveCursor((m.h + 1) / 2)
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
-			(&m).moveCursor(-(m.h+1)/2)
+			(&m).moveCursor(-(m.h + 1) / 2)
 		case ":":
 			m.mode = ExMode
 		default:
@@ -144,6 +156,8 @@ func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+type EndLoadingMsg struct {}
 
 func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -161,6 +175,13 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = NormalMode
 		case "enter":
 			eCmd := m.exInput.Value()
+			m.exInput.SetValue("")
+			m.mode = NormalMode
+
+			if eCmd == "q" || eCmd == "quit" {
+				return m, tea.Quit
+			}
+
 			if eCmd == "CollapseAll" {
 				for _, region := range m.regions {
 					region.SetECState(true)
@@ -172,12 +193,19 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 					region.SetECState(false)
 				}
 			}
-			if eCmd == "q" || eCmd == "quit" {
-				return m, tea.Quit
-			}
 
-			m.exInput.SetValue("")
-			m.mode = NormalMode
+			if eCmd == "Load" {
+				newModel, tickCmd := m.startLoading("Loading stuff...")
+
+				return newModel, tea.Batch(
+					tickCmd,
+					func() tea.Msg {
+						time.Sleep(3 * time.Second)
+						return EndLoadingMsg{}
+					},
+				)
+
+			}
 		}
 	}
 
@@ -185,9 +213,25 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m Model) startLoading(text string) (Model, tea.Cmd) {
+	m.spinner.Spinner = spinner.Dot
+	m.loadingText = text
+
+	return m, m.spinner.Tick
+}
+
+func (m Model) endLoading(text string) {
+	m.loadingText = ""
+}
+
+/*
+func (m *Model) submitReview() {
+}
+*/
+
 func (m *Model) moveCursor(delta int) {
 	totalHeight := m.totalHeight()
-	prospective := Clamp(0, m.cursor + delta, totalHeight - 1)
+	prospective := Clamp(0, m.cursor+delta, totalHeight-1)
 	region, relCursor := m.getCursorTarget(prospective)
 	relTarget := region.GetNextCursorTarget(relCursor, delta)
 	pTDelta := relTarget - relCursor
@@ -196,6 +240,10 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m Model) View() string {
+	if m.loadingText != "" {
+		return fmt.Sprintf("%s %s", m.spinner.View(), m.loadingText)
+	}
+
 	var parts []string
 	// target height for normal region rendering (ex mode input is the exception)
 	tH := m.h
