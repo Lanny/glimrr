@@ -4,8 +4,8 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbles/textinput"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 )
@@ -20,31 +20,12 @@ var bgColorMap = [...]string{
 	"#744",
 }
 
-const NUM_FR_TYPES = 5
 
 const (
-	FRLine    int = 0
-	FRHeader      = 1
-	FRAbr         = 2
-	FRComment     = 3
-	FRBlank       = 4
+	NormalMode int = 0
+	ExMode         = 1
 )
 
-type FileRegion struct {
-	ff *FormattedFile
-
-	oldPath string
-	newPath string
-	added   bool
-	removed bool
-
-	collapsed bool
-
-	lineMap        []int
-	abrs           []abridgement
-	notes          []GLNote
-	lineNoColWidth int
-}
 
 type ViewParams struct {
 	x              int
@@ -81,7 +62,7 @@ type VRegion interface {
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
 	View(startLine int, numLines int, cursor int, m *Model) string
 	GetNextCursorTarget(lineNo int, direction int) int
-	FullyExpand(width int)
+	SetECState(value bool)
 }
 
 type abridgement struct {
@@ -89,361 +70,6 @@ type abridgement struct {
 	end   int
 }
 
-func (f *FileRegion) Height() int {
-	if f.collapsed {
-		return 1
-	} else {
-		return len(f.lineMap)
-	}
-}
-
-func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
-	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
-	vp := &ViewParams{
-		x: 0,
-		width: m.w,
-		lineNoColWidth: f.lineNoColWidth,
-	}
-
-
-	switch msg.String() {
-	case "enter":
-		if objType == FRAbr {
-			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
-			f.updateLineMap(vp)
-		} else if objType == FRHeader {
-			f.collapsed = !f.collapsed
-		}
-
-	case "t":
-		f.collapsed = !f.collapsed
-	case "c":
-		if objType != FRLine {
-			return nil
-		}
-
-		tmpFile, err := os.CreateTemp("", "new-comment-*.md")
-		if err != nil {
-			panic("Unable to open file for creating a new comment.")
-		}
-
-		fname := tmpFile.Name()
-		defer os.Remove(fname)
-
-		m.p.ReleaseTerminal()
-
-		cmd := exec.Command("/usr/bin/vi", fname)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Run()
-
-		commentBody, err := os.ReadFile(fname)
-
-		if err != nil {
-			ln("Unable to read comment temp file!")
-			return nil
-		}
-		ln("Successfully collected comment:\n%s", commentBody)
-
-		line := f.ff.lines[objIdx]
-		var oldLineNo int
-		var newLineNo int
-
-		if line.mode != ADDED {
-			oldLineNo = line.aNum
-		}
-
-		if line.mode != REMOVED {
-			newLineNo = line.bNum
-		}
-
-		draftNote := GLNote{
-			Id: -1,
-			Type: "DiffNote",
-			Body: string(commentBody),
-			Author: GLAuthor{
-				Id: -1,
-				Name: "(you)",
-				Username: "(you)",
-			},
-			Position: GLPosition{
-				PositionType: "text",
-				OldPath: f.oldPath,
-				NewPath: f.newPath,
-				OldLine: oldLineNo,
-				NewLine: newLineNo,
-			},
-		}
-		f.notes = append(f.notes, draftNote)
-
-
-		m.p.RestoreTerminal()
-		f.updateLineMap(vp)
-		return nil
-	}
-
-	return nil
-}
-
-func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {
-	vp := &ViewParams{
-		x: 0,
-		width: m.w,
-		lineNoColWidth: f.lineNoColWidth,
-	}
-
-	if numLines < 1 {
-		return ""
-	}
-
-	view := make([]string, numLines)
-
-	ecSymbol := "▼"
-	if f.collapsed {
-		ecSymbol = "▶"
-	}
-
-	modeString := ""
-	if f.added {
-		modeString = " [NEW]"
-	} else if f.removed {
-		modeString = " [DELETED]"
-	}
-
-	// Render the file header
-	view[0] = gloss.NewStyle().
-		Width(m.w).
-		Background(gloss.Color("#b9c902")).
-		Foreground(gloss.Color("#000")).
-		Render(fmt.Sprintf(" %s %s%s", ecSymbol, f.newPath, modeString))
-
-	// Start from 1 to ignore space for header
-	for i := 1; i < numLines; i++ {
-		objIdx, objType := DivMod(f.lineMap[startLine+i], NUM_FR_TYPES)
-		isCursor := i+startLine == cursor
-
-		if objType == FRLine {
-			line := f.ff.lines[objIdx]
-			view[i] = f.renderLine(line, isCursor, m)
-		} else if objType == FRAbr {
-			var bgColor gloss.Color
-			if isCursor {
-				bgColor = gloss.Color(bgColorMap[4])
-			} else {
-				bgColor = gloss.Color(bgColorMap[0])
-			}
-
-			view[i] = gloss.NewStyle().
-				Width(m.w).
-				Align(gloss.Center).
-				Background(bgColor).
-				Render("...")
-		} else if objType == FRComment {
-			note := f.notes[objIdx]
-			blockLines := strings.Split(note.Render(vp, isCursor), "\n")
-			for _, line := range blockLines {
-				view[i] = line
-				i++
-			}
-			i--
-		} else if objType == FRBlank {
-			view[i] = gloss.NewStyle().
-				Width(m.w).
-				Background(gloss.Color(bgColorMap[0])).
-				Render(".")
-		} else {
-			view[i] = gloss.NewStyle().
-				Width(m.w).
-				Background(gloss.Color(bgColorMap[0])).
-				Render("Whoops!")
-		}
-	}
-
-	return strings.Join(view, "\n")
-}
-
-func (f *FileRegion) renderLine(line *FormattedLine, cursor bool, m *Model) string {
-	var lineContent string
-	bgIdx := line.mode
-	if cursor {
-		bgIdx = bgIdx | 4
-	}
-	background := gloss.Color(bgColorMap[bgIdx])
-
-	if line.mode == UNCHANGED {
-		lineContent = fmt.Sprintf(
-			"%*d %*d   %s",
-			f.lineNoColWidth, line.aNum,
-			f.lineNoColWidth, line.bNum,
-			line.Render(background),
-		)
-	} else if line.mode == ADDED {
-		lineContent = fmt.Sprintf(
-			"%*s %*d + %s",
-			f.lineNoColWidth, "",
-			f.lineNoColWidth, line.bNum,
-			line.Render(background),
-		)
-	} else {
-		lineContent = fmt.Sprintf(
-			"%*d %*s - %s",
-			f.lineNoColWidth, line.aNum,
-			f.lineNoColWidth, "",
-			line.Render(background),
-		)
-	}
-
-	return gloss.NewStyle().
-		Width(m.w).
-		Background(background).
-		Inline(true).
-		MaxWidth(m.w).
-		Render(lineContent)
-}
-
-func (f *FileRegion) GetNextCursorTarget(lineNo int, direction int) int {
-	i := lineNo
-	d := Signum(direction)
-
-	for {
-		if i >= len(f.lineMap) || i < 0 {
-			d = -d
-			i += d
-			continue
-		}
-
-		_, objType := DivMod(f.lineMap[i], NUM_FR_TYPES)
-		if objType != FRBlank {
-			break
-		}
-
-		i += d
-	}
-
-	return i
-}
-
-
-func (f *FileRegion) FullyExpand(width int) {
-	vp := &ViewParams{
-		x: 0,
-		width: width,
-		lineNoColWidth: f.lineNoColWidth,
-	}
-	f.abrs = f.abrs[:0]
-	f.updateLineMap(vp)
-}
-
-func (f *FileRegion) updateLineMap(vp *ViewParams) {
-	f.lineMap = make([]int, 1)
-	lineIdx := 0
-	abrIdx := 0
-	noteIndex := make(map[string]([]int))
-
-	for nidx, note := range f.notes {
-		var key string
-		if note.Position.NewLine == 0 {
-			key = fmt.Sprintf("-%d", note.Position.OldLine)
-		} else if note.Position.OldLine == 0 {
-			key = fmt.Sprintf("+%d", note.Position.NewLine)
-		} else {
-			key = fmt.Sprintf(" %d_%d", note.Position.NewLine, note.Position.OldLine)
-		}
-
-		if _, ok := noteIndex[key]; !ok {
-			noteIndex[key] = nil
-		}
-
-		noteIndex[key] = append(noteIndex[key], nidx)
-
-	}
-
-	f.lineMap[0] = FRHeader
-
-	for lineIdx < len(f.ff.lines) {
-		if abrIdx < len(f.abrs) && lineIdx == f.abrs[abrIdx].start {
-			f.lineMap = append(f.lineMap, (abrIdx*NUM_FR_TYPES)+FRAbr)
-			lineIdx = f.abrs[abrIdx].end + 1
-			abrIdx++
-		} else {
-			f.lineMap = append(f.lineMap, (lineIdx*NUM_FR_TYPES)+FRLine)
-			var key string
-			formattedLine := f.ff.lines[lineIdx]
-
-			if formattedLine.mode == ADDED {
-				key = fmt.Sprintf("+%d", formattedLine.bNum)
-			} else if formattedLine.mode == REMOVED {
-				key = fmt.Sprintf("-%d", formattedLine.aNum)
-			} else {
-				key = fmt.Sprintf(" %d_%d", formattedLine.bNum, formattedLine.aNum)
-			}
-
-			if noteIndicies, ok := noteIndex[key]; ok {
-				for _, nidx := range noteIndicies {
-					note := f.notes[nidx]
-					f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
-					commentHeight := note.Height(vp)
-					for i := 1; i<commentHeight; i++ {
-						f.lineMap = append(f.lineMap, FRBlank)
-					}
-				}
-			}
-
-			lineIdx++
-		}
-	}
-}
-
-func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote, width int) *FileRegion {
-	region := FileRegion{
-		ff:        ff,
-		oldPath:   change.OldPath,
-		newPath:   change.NewPath,
-		added:     change.NewFile,
-		removed:   change.DeletedFile,
-		collapsed: change.DeletedFile,
-		notes:     notes,
-	}
-
-	inNonAbr := ff.lines[0].mode != UNCHANGED
-	lastNonAbrEnd := 0
-	linesWithoutChange := 0
-
-	for idx, line := range ff.lines {
-		if line.mode == UNCHANGED {
-			linesWithoutChange++
-
-			if inNonAbr && linesWithoutChange >= 10 {
-				inNonAbr = false
-				lastNonAbrEnd = idx - 5
-			}
-		} else {
-			linesWithoutChange = 0
-
-			if !inNonAbr {
-				inNonAbr = true
-				region.abrs = append(region.abrs, abridgement{
-					start: lastNonAbrEnd,
-					end:   Max(0, Max(lastNonAbrEnd, idx-5)),
-				})
-			}
-		}
-	}
-
-	if !inNonAbr {
-		region.abrs = append(region.abrs, abridgement{
-			start: lastNonAbrEnd,
-			end:   len(ff.lines) - 1,
-		})
-	}
-
-	region.lineNoColWidth = GetLineNoColWidth(ff)
-	region.updateLineMap(&ViewParams{
-		lineNoColWidth: region.lineNoColWidth,
-		width: width,
-	})
-	return &region
-}
 
 type Model struct {
 	cursor  int
@@ -451,6 +77,8 @@ type Model struct {
 	h       int
 	x       int
 	y       int
+	mode    int
+	exInput textinput.Model
 	regions []VRegion
 	p       *tea.Program
 }
@@ -460,10 +88,21 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.mode == NormalMode {
+		return m.nUpdate(msg)
+	} else if m.mode == ExMode {
+		return m.eUpdate(msg)
+	} else {
+		return m, nil
+	}
+}
+
+func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w = msg.Width
 		m.h = msg.Height
+		m.exInput.Width = msg.Width
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -483,10 +122,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.y = m.cursor - m.h + 1
 			}
 
-		case "e":
-			for _, region := range m.regions {
-				region.FullyExpand(m.w)
-			}
 		case "G":
 			totalHeight := m.totalHeight()
 			m.y = totalHeight - m.h
@@ -498,15 +133,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+u":
 			m.y = Max(m.y-m.h/2, 0)
 			(&m).moveCursor(-(m.h+1)/2)
+		case ":":
+			m.mode = ExMode
 		default:
 			region, relCursor := m.getCursorTarget(m.cursor)
 			cmd := region.Update(&m, msg, relCursor)
 			return m, cmd
 		}
 	}
-	jankLog(fmt.Sprintf("c: %d, y: %d\n", m.cursor, m.y))
 
 	return m, nil
+}
+
+func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w = msg.Width
+		m.h = msg.Height
+		m.exInput.Width = msg.Width
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			m.exInput.SetValue("")
+			m.mode = NormalMode
+		case "enter":
+			eCmd := m.exInput.Value()
+			if eCmd == "CollapseAll" {
+				for _, region := range m.regions {
+					region.SetECState(true)
+				}
+			}
+
+			if eCmd == "ExpandAll" {
+				for _, region := range m.regions {
+					region.SetECState(false)
+				}
+			}
+
+			m.exInput.SetValue("")
+			m.mode = NormalMode
+		}
+	}
+
+	m.exInput, cmd = m.exInput.Update(msg)
+	return m, cmd
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -521,12 +194,19 @@ func (m *Model) moveCursor(delta int) {
 
 func (m Model) View() string {
 	var parts []string
+	// target height for normal region rendering (ex mode input is the exception)
+	tH := m.h
+	// Height of accumulated rendering, so we know when to should stop
 	cumY := 0
+
+	if m.mode == ExMode {
+		tH -= 1
+	}
 
 	for _, region := range m.regions {
 		rH := region.Height()
 
-		if cumY > m.y+m.h {
+		if cumY > m.y+tH {
 			// Got enough lines to paint a screen
 			break
 		}
@@ -538,7 +218,7 @@ func (m Model) View() string {
 		}
 
 		startLine := Max(m.y-cumY, 0)
-		linesToRender := Min(Min(rH-startLine, m.y+m.h-cumY), m.h)
+		linesToRender := Min(Min(rH-startLine, m.y+tH-cumY), tH)
 		cursor := m.cursor - cumY
 		if m.cursor > cumY+rH || m.cursor < cumY {
 			cursor = -1
@@ -548,8 +228,8 @@ func (m Model) View() string {
 		cumY += rH
 	}
 
-	if len(parts) > m.h {
-		ln("Warning: Viewport height it %d but view is %d lines high", m.h, len(parts))
+	if m.mode == ExMode {
+		parts = append(parts, m.exInput.View())
 	}
 
 	background := gloss.Color(bgColorMap[0])
@@ -603,10 +283,16 @@ func NewModel() Model {
 		panic(err)
 	}
 
+	exi := textinput.New()
+	exi.Focus()
+	exi.Prompt = ":"
+	exi.Width = 80
+
 	model := Model{
 		regions: make([]VRegion, len(mrData.Changes)),
 		w:       80,
 		h:       24,
+		exInput: exi,
 	}
 
 	// Partion notes by file that they apply to
