@@ -172,6 +172,9 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 					region.SetECState(false)
 				}
 			}
+			if eCmd == "q" || eCmd == "quit" {
+				return m, tea.Quit
+			}
 
 			m.exInput.SetValue("")
 			m.mode = NormalMode
