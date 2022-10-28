@@ -240,8 +240,16 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m Model) View() string {
+	background := gloss.Color(bgColorMap[0])
+
 	if m.loadingText != "" {
-		return fmt.Sprintf("%s %s", m.spinner.View(), m.loadingText)
+		return gloss.NewStyle().
+			Width(m.w).
+			Height(m.h).
+			Padding((m.h-1)/2, 0).
+			Align(gloss.Center).
+			Background(background).
+			Render(fmt.Sprintf("%s %s", m.spinner.View(), m.loadingText))
 	}
 
 	var parts []string
@@ -283,7 +291,6 @@ func (m Model) View() string {
 		parts = append(parts, m.exInput.View())
 	}
 
-	background := gloss.Color(bgColorMap[0])
 	return gloss.NewStyle().
 		Width(m.w).
 		Height(m.h).
