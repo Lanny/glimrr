@@ -27,6 +27,13 @@ const (
 	ExMode         = 1
 )
 
+type EndLoadingMsg struct {}
+type LoadMRMsg struct {
+	regions     []VRegion
+}
+
+
+
 type ViewParams struct {
 	x              int
 	width          int
@@ -60,6 +67,7 @@ func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
+	Resize(m *Model)
 	View(startLine int, numLines int, cursor int, m *Model) string
 	GetNextCursorTarget(lineNo int, direction int) int
 	SetECState(value bool)
@@ -84,17 +92,25 @@ type Model struct {
 	p           *tea.Program
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w = msg.Width
+		m.h = msg.Height
+		m.exInput.Width = msg.Width
 	case EndLoadingMsg:
 		ln("%v", msg)
 		m.loadingText = ""
+	case LoadMRMsg:
+		m.loadingText = ""
+		m.regions = msg.regions
+		ln("heyyy")
+		for _, region := range m.regions {
+			ln("yaaa")
+			region.Resize(&m)
+		}
 	}
 
 	if m.loadingText != "" {
@@ -111,11 +127,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.w = msg.Width
-		m.h = msg.Height
-		m.exInput.Width = msg.Width
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -146,6 +157,11 @@ func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.y = Max(m.y-m.h/2, 0)
 			(&m).moveCursor(-(m.h + 1) / 2)
 		case ":":
+			m.exInput = textinput.New()
+			m.exInput.Focus()
+			m.exInput.Prompt = ":"
+			m.exInput.Width = m.w
+
 			m.mode = ExMode
 		default:
 			region, relCursor := m.getCursorTarget(m.cursor)
@@ -157,17 +173,10 @@ func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-type EndLoadingMsg struct {}
-
 func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.w = msg.Width
-		m.h = msg.Height
-		m.exInput.Width = msg.Width
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -219,22 +228,6 @@ func (m Model) doBlockingLoad(loadingMsg string, f func()) (tea.Model, tea.Cmd) 
 	)
 }
 
-func (m Model) startLoading(text string) (Model, tea.Cmd) {
-	m.spinner.Spinner = spinner.Dot
-	m.loadingText = text
-
-	return m, m.spinner.Tick
-}
-
-func (m Model) endLoading(text string) {
-	m.loadingText = ""
-}
-
-/*
-func (m *Model) submitReview() {
-}
-*/
-
 func (m *Model) moveCursor(delta int) {
 	totalHeight := m.totalHeight()
 	prospective := Clamp(0, m.cursor+delta, totalHeight-1)
@@ -246,6 +239,7 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m Model) View() string {
+	ln("h: %d, w: %d", m.h, m.w)
 	background := gloss.Color(bgColorMap[0])
 
 	if m.loadingText != "" {
@@ -329,6 +323,93 @@ func (m Model) totalHeight() int {
 	return h
 }
 
+func (m Model) Init() tea.Cmd {
+	m.spinner.Spinner = spinner.Dot
+	m.loadingText = ""
+
+	return tea.Batch(
+		m.spinner.Tick,
+		func() tea.Msg {
+			pid := 39953668
+			mrid := 1
+
+			gl := GLInstance{apiUrl: "https://gitlab.com/api"}
+			gl.Init()
+			mrData, err := gl.FetchMR(pid, mrid)
+			if err != nil {
+				panic(err)
+			}
+
+			regions := make([]VRegion, len(mrData.Changes))
+
+			// Partion notes by file that they apply to
+			notesByFile := make(map[string]([]GLNote))
+			for _, discussion := range mrData.Discussions {
+				for _, note := range discussion.Notes {
+					if note.Type == "DiffNote" {
+						path := note.Position.NewPath
+						notesByFile[path] = append(notesByFile[path], note)
+					}
+				}
+			}
+
+			var wg sync.WaitGroup
+			q := make(chan CreateFileRegionMsg, 8)
+
+			for i := 0; i < 4; i++ {
+				wg.Add(1)
+				go func() {
+					for msg := range q {
+						var baseContent string
+
+						if !msg.change.NewFile {
+							fetchedContent, err := gl.FetchFileContents(
+								msg.pid,
+								msg.change.OldPath,
+								msg.ref,
+							)
+							if err != nil {
+								panic(err)
+							}
+							baseContent = *fetchedContent
+						} else {
+							baseContent = ""
+						}
+
+						ff, err := FormatFile(baseContent, msg.change)
+						if err != nil {
+							panic(err)
+						}
+
+						var notes []GLNote
+						var ok bool
+						if notes, ok = notesByFile[msg.change.NewPath]; !ok {
+							notes = nil
+						}
+
+						regions[msg.idx] = newFileRegion(ff, msg.change, notes, m.w)
+					}
+					wg.Done()
+				}()
+
+			}
+
+			for idx, change := range mrData.Changes {
+				q <- CreateFileRegionMsg{
+					idx:    idx,
+					pid:    pid,
+					change: change,
+					ref:    mrData.DiffRefs.BaseSHA,
+				}
+			}
+			close(q)
+			wg.Wait()
+
+			return LoadMRMsg{ regions: regions }
+		},
+	)
+}
+
 type CreateFileRegionMsg struct {
 	idx    int
 	pid    int
@@ -336,104 +417,20 @@ type CreateFileRegionMsg struct {
 	change GLChangeData
 }
 
-func NewModel() Model {
-	pid := 39953668
-	mrid := 1
-
-	gl := GLInstance{apiUrl: "https://gitlab.com/api"}
-	gl.Init()
-	mrData, err := gl.FetchMR(pid, mrid)
-	if err != nil {
-		panic(err)
-	}
-
-	exi := textinput.New()
-	exi.Focus()
-	exi.Prompt = ":"
-	exi.Width = 80
-
-	model := Model{
-		regions: make([]VRegion, len(mrData.Changes)),
-		w:       80,
-		h:       24,
-		exInput: exi,
-	}
-
-	// Partion notes by file that they apply to
-	notesByFile := make(map[string]([]GLNote))
-	for _, discussion := range mrData.Discussions {
-		for _, note := range discussion.Notes {
-			if note.Type == "DiffNote" {
-				path := note.Position.NewPath
-				notesByFile[path] = append(notesByFile[path], note)
-			}
-		}
-	}
-
-	var wg sync.WaitGroup
-	q := make(chan CreateFileRegionMsg, 8)
-
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go func() {
-			for msg := range q {
-				var baseContent string
-
-				if !msg.change.NewFile {
-					fetchedContent, err := gl.FetchFileContents(
-						msg.pid,
-						msg.change.OldPath,
-						msg.ref,
-					)
-					if err != nil {
-						panic(err)
-					}
-					baseContent = *fetchedContent
-				} else {
-					baseContent = ""
-				}
-
-				ff, err := FormatFile(baseContent, msg.change)
-				if err != nil {
-					panic(err)
-				}
-
-				var notes []GLNote
-				var ok bool
-				if notes, ok = notesByFile[msg.change.NewPath]; !ok {
-					notes = nil
-				}
-
-				model.regions[msg.idx] = newFileRegion(ff, msg.change, notes, model.w)
-			}
-			wg.Done()
-		}()
-
-	}
-
-	for idx, change := range mrData.Changes {
-		q <- CreateFileRegionMsg{
-			idx:    idx,
-			pid:    pid,
-			change: change,
-			ref:    mrData.DiffRefs.BaseSHA,
-		}
-	}
-	close(q)
-	wg.Wait()
-
-	return model
-
-}
-
 func main() {
 	jankLog("\n\n====== NEW RUN ======\n\n")
-	model := NewModel()
+	model := Model{
+		loadingText: "Loading MR...",
+		h: 24,
+		w: 80,
+	}
+	model.spinner.Spinner = spinner.Dot
+
+	// This doesn't feel great, but we need to call program methods from the
+	// model so *shrug*
 	mp := &model
 	program := tea.NewProgram(mp)
 	mp.p = program
-
-	model.Init()
 
 	if err := program.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)

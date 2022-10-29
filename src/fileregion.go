@@ -43,6 +43,15 @@ func (f *FileRegion) Height() int {
 	}
 }
 
+func (f *FileRegion) Resize(m *Model) {
+	vp := &ViewParams{
+		x:              0,
+		width:          m.w,
+		lineNoColWidth: f.lineNoColWidth,
+	}
+	f.updateLineMap(vp)
+}
+
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
 	vp := &ViewParams{
