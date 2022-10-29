@@ -195,22 +195,28 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if eCmd == "Load" {
-				newModel, tickCmd := m.startLoading("Loading stuff...")
-
-				return newModel, tea.Batch(
-					tickCmd,
-					func() tea.Msg {
-						time.Sleep(3 * time.Second)
-						return EndLoadingMsg{}
-					},
-				)
-
+				return m.doBlockingLoad("Loading stuff...", func() {
+					time.Sleep(3 * time.Second)
+				})
 			}
 		}
 	}
 
 	m.exInput, cmd = m.exInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) doBlockingLoad(loadingMsg string, f func()) (tea.Model, tea.Cmd) {
+	m.spinner.Spinner = spinner.Dot
+	m.loadingText = loadingMsg
+
+	return m, tea.Batch(
+		m.spinner.Tick,
+		func() tea.Msg {
+			f()
+			return EndLoadingMsg{}
+		},
+	)
 }
 
 func (m Model) startLoading(text string) (Model, tea.Cmd) {
