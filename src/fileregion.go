@@ -35,23 +35,6 @@ type FileRegion struct {
 	lineNoColWidth int
 }
 
-func (f *FileRegion) Height() int {
-	if f.collapsed {
-		return 1
-	} else {
-		return len(f.lineMap)
-	}
-}
-
-func (f *FileRegion) Resize(m *Model) {
-	vp := &ViewParams{
-		x:              0,
-		width:          m.w,
-		lineNoColWidth: f.lineNoColWidth,
-	}
-	f.updateLineMap(vp)
-}
-
 func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
 	vp := &ViewParams{
@@ -274,6 +257,35 @@ func (f *FileRegion) GetNextCursorTarget(lineNo int, direction int) int {
 	}
 
 	return i
+}
+
+func (f *FileRegion) Height() int {
+	if f.collapsed {
+		return 1
+	} else {
+		return len(f.lineMap)
+	}
+}
+
+func (f *FileRegion) Resize(m *Model) {
+	vp := &ViewParams{
+		x:              0,
+		width:          m.w,
+		lineNoColWidth: f.lineNoColWidth,
+	}
+	f.updateLineMap(vp)
+}
+
+func (f *FileRegion) GetPendingNotes() []*GLNote {
+	var pendingNotes []*GLNote
+
+	for _, note := range f.notes {
+		if note.Id < 0 {
+			pendingNotes = append(pendingNotes, &note)
+		}
+	}
+
+	return pendingNotes
 }
 
 func (f *FileRegion) SetECState(value bool) {

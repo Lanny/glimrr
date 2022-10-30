@@ -29,7 +29,8 @@ const (
 
 type EndLoadingMsg struct {}
 type LoadMRMsg struct {
-	regions     []VRegion
+	regions []VRegion
+	mr      GLMRData
 }
 
 
@@ -71,6 +72,7 @@ type VRegion interface {
 	View(startLine int, numLines int, cursor int, m *Model) string
 	GetNextCursorTarget(lineNo int, direction int) int
 	SetECState(value bool)
+	GetPendingNotes() []*GLNote
 }
 
 type abridgement struct {
@@ -86,6 +88,7 @@ type Model struct {
 	y           int
 	mode        int
 	loadingText string
+	mr          GLMRData
 	spinner     spinner.Model
 	exInput     textinput.Model
 	regions     []VRegion
@@ -106,9 +109,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case LoadMRMsg:
 		m.loadingText = ""
 		m.regions = msg.regions
-		ln("heyyy")
+		m.mr = msg.mr
 		for _, region := range m.regions {
-			ln("yaaa")
 			region.Resize(&m)
 		}
 	}
@@ -206,6 +208,18 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if eCmd == "Load" {
 				return m.doBlockingLoad("Loading stuff...", func() {
 					time.Sleep(3 * time.Second)
+				})
+			}
+			if eCmd == "Submit" {
+				return m.doBlockingLoad("Submitting review...", func() {
+					gl := GLInstance{apiUrl: "https://gitlab.com/api"}
+					gl.Init()
+
+					for _, region := range m.regions {
+						for _, note := range region.GetPendingNotes() {
+							gl.CreateComment(*note, m.mr)
+						}
+					}
 				})
 			}
 		}
@@ -405,7 +419,10 @@ func (m Model) Init() tea.Cmd {
 			close(q)
 			wg.Wait()
 
-			return LoadMRMsg{ regions: regions }
+			return LoadMRMsg{
+				regions: regions,
+				mr: *mrData,
+			}
 		},
 	)
 }

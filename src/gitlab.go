@@ -58,9 +58,12 @@ type GLDiscussion struct {
 }
 
 type GLMRData struct {
-	Title        string
-	CreatedAt    string `json:"created_at"`
-	State        string
+	Id           int            `json:"id"`
+	Iid          int            `json:"iid"`
+	ProjectId    int            `json:"project_id"`
+	Title        string         `json:"title"`
+	CreatedAt    string         `json:"created_at"`
+	State        string         `json:"state"`
 	TargetBranch string         `json:"target_branch"`
 	SourceBranch string         `json:"source_branch"`
 	Changes      []GLChangeData `json:"changes"`
@@ -97,7 +100,7 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 			return nil, err
 		}
 		if resp.StatusCode != 200 {
-			ln("Response body for request to %s:\n```\n%s\n```", url, string(body))
+			ln("Response body for GET request to %s:\n```\n%s\n```", url, string(body))
 			return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
 		}
 
@@ -107,6 +110,34 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 
 		return body, nil
 	}
+}
+
+func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
+	client := &http.Client{}
+
+	ln("Posting to URL: %s", url)
+	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("PRIVATE-TOKEN", os.Getenv("GLIMRR_TOKEN"))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		ln("Response body for POST request to %s:\n```\n%s\n```", url, string(body))
+		return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
+	}
+
+	return body, nil
 }
 
 func (gl *GLInstance) Init() {
@@ -151,4 +182,39 @@ func (gl *GLInstance) FetchFileContents(pid int, path string, ref string) (*stri
 
 	bodyAsStr := string(body)
 	return &bodyAsStr, nil
+}
+
+func (gl *GLInstance) CreateComment(comment GLNote, mr GLMRData) (GLDiscussion, error) {
+	var discussion GLDiscussion
+
+	form := url.Values{}
+	form.Add("body", comment.Body)
+	form.Add("position[position_type]", "text")
+	form.Add("position[base_sha]", mr.DiffRefs.BaseSHA)
+	form.Add("position[head_sha]", mr.DiffRefs.HeadSHA)
+	form.Add("position[start_sha]", mr.DiffRefs.StartSHA)
+	form.Add("position[old_path]", comment.Position.OldPath)
+	form.Add("position[new_path]", comment.Position.NewPath)
+
+	if comment.Position.NewLine > 0 {
+		form.Add("position[new_line]", fmt.Sprintf("%d", comment.Position.NewLine))
+	}
+
+	if comment.Position.OldLine > 0 {
+		form.Add("position[old_line]", fmt.Sprintf("%d", comment.Position.OldLine))
+	}
+
+	url := fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/discussions", strings.TrimSuffix(gl.apiUrl, "/"), mr.ProjectId, mr.Iid)
+
+	body, err := gl.postForm(url, form)
+	if err != nil {
+		return discussion, err
+	}
+
+	err = json.Unmarshal(body, &discussion)
+	if err != nil {
+		return discussion, err
+	}
+
+	return discussion, nil
 }
