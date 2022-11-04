@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"time"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 var bgColorMap = [...]string{
@@ -27,13 +27,11 @@ const (
 	ExMode         = 1
 )
 
-type EndLoadingMsg struct {}
+type EndLoadingMsg struct{}
 type LoadMRMsg struct {
 	regions []VRegion
 	mr      GLMRData
 }
-
-
 
 type ViewParams struct {
 	x              int
@@ -48,8 +46,10 @@ func (n *GLNote) Height(vp *ViewParams) int {
 func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 	margin := vp.lineNoColWidth*2 + 2
 	bg := "#444"
+	borderColor := "#FFF"
 	if cursor {
 		bg = "#666"
+		borderColor = "#AF0"
 	}
 
 	block := gloss.NewStyle().
@@ -58,7 +58,7 @@ func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 		MarginLeft(margin).
 		Padding(0, 2).
 		Border(gloss.NormalBorder(), false, false, false, true).
-		BorderForeground(gloss.Color("#FFF")).
+		BorderForeground(gloss.Color(borderColor)).
 		BorderBackground(gloss.Color(bg)).
 		Render(n.Author.Name + ":\n" + n.Body)
 
@@ -254,7 +254,7 @@ func (m *Model) moveCursor(delta int) {
 
 func (m Model) View() string {
 	ln("h: %d, w: %d", m.h, m.w)
-	background := gloss.Color(bgColorMap[0])
+	background := CFG.Colors.Background
 
 	if m.loadingText != "" {
 		return gloss.NewStyle().
@@ -421,7 +421,7 @@ func (m Model) Init() tea.Cmd {
 
 			return LoadMRMsg{
 				regions: regions,
-				mr: *mrData,
+				mr:      *mrData,
 			}
 		},
 	)
@@ -436,10 +436,22 @@ type CreateFileRegionMsg struct {
 
 func main() {
 	jankLog("\n\n====== NEW RUN ======\n\n")
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		configPath := fmt.Sprintf("%s/.config/glimrr/config.json", homeDir)
+		userConfig, err := loadConfigFromFile(configPath)
+		if err != nil {
+			panic(err)
+		} else {
+			CFG = userConfig
+		}
+	}
+
 	model := Model{
 		loadingText: "Loading MR...",
-		h: 24,
-		w: 80,
+		h:           24,
+		w:           80,
 	}
 	model.spinner.Spinner = spinner.Dot
 
