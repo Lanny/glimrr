@@ -417,7 +417,8 @@ func main() {
 		configPath := fmt.Sprintf("%s/.config/glimrr/config.json", homeDir)
 		userConfig, err := loadConfigFromFile(configPath)
 		if err != nil {
-			panic(err)
+			CFG = userConfig
+			ln("Unable to load user config, using defaults.")
 		} else {
 			CFG = userConfig
 		}
