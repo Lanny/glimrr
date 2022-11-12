@@ -19,19 +19,30 @@ const (
 	FRBlank       = 4
 )
 
+type CommentPosition struct {
+	OldPath string
+	OldLine int
+	NewPath string
+	NewLine int
+}
+
+type Comment interface {
+	Height(vp *ViewParams) int
+	Render(vp *ViewParams, cursor bool) string
+	IsPending() bool
+	GetPosition() CommentPosition
+}
+
 type FileRegion struct {
 	ff *FormattedFile
-
 	oldPath string
 	newPath string
 	added   bool
 	removed bool
-
 	collapsed bool
-
 	lineMap        []int
 	abrs           []abridgement
-	notes          []GLNote
+	comments       []Comment
 	lineNoColWidth int
 }
 
@@ -54,6 +65,12 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 
 	case "t":
 		f.collapsed = !f.collapsed
+	case "d":
+		if objType != FRComment {
+			return nil
+		}
+		//note := f.notes[objIdx]
+
 	case "c":
 		if objType != FRLine {
 			return nil
@@ -111,7 +128,7 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 				NewLine:      newLineNo,
 			},
 		}
-		f.notes = append(f.notes, draftNote)
+		f.comments = append(f.comments, &draftNote)
 		f.updateLineMap(vp)
 
 		m.p.RestoreTerminal()
@@ -175,8 +192,8 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Background(bgColor).
 				Render("...")
 		} else if objType == FRComment {
-			note := f.notes[objIdx]
-			blockLines := strings.Split(note.Render(vp, isCursor), "\n")
+			comment := f.comments[objIdx]
+			blockLines := strings.Split(comment.Render(vp, isCursor), "\n")
 			for _, line := range blockLines {
 				view[i] = line
 				i++
@@ -276,12 +293,12 @@ func (f *FileRegion) Resize(m *Model) {
 	f.updateLineMap(vp)
 }
 
-func (f *FileRegion) GetPendingNotes() []*GLNote {
-	var pendingNotes []*GLNote
+func (f *FileRegion) GetPendingComments() []Comment {
+	var pendingNotes []Comment
 
-	for _, note := range f.notes {
-		if note.Id < 0 {
-			pendingNotes = append(pendingNotes, &note)
+	for _, comment := range f.comments {
+		if comment.IsPending() {
+			pendingNotes = append(pendingNotes, comment)
 		}
 	}
 
@@ -296,23 +313,24 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 	f.lineMap = make([]int, 1)
 	lineIdx := 0
 	abrIdx := 0
-	noteIndex := make(map[string]([]int))
+	commentIndex := make(map[string]([]int))
 
-	for nidx, note := range f.notes {
+	for cidx, comment := range f.comments {
 		var key string
-		if note.Position.NewLine == 0 {
-			key = fmt.Sprintf("-%d", note.Position.OldLine)
-		} else if note.Position.OldLine == 0 {
-			key = fmt.Sprintf("+%d", note.Position.NewLine)
+		pos := comment.GetPosition()
+		if pos.NewLine == 0 {
+			key = fmt.Sprintf("-%d", pos.OldLine)
+		} else if pos.OldLine == 0 {
+			key = fmt.Sprintf("+%d", pos.NewLine)
 		} else {
-			key = fmt.Sprintf(" %d_%d", note.Position.NewLine, note.Position.OldLine)
+			key = fmt.Sprintf(" %d_%d", pos.NewLine, pos.OldLine)
 		}
 
-		if _, ok := noteIndex[key]; !ok {
-			noteIndex[key] = nil
+		if _, ok := commentIndex[key]; !ok {
+			commentIndex[key] = nil
 		}
 
-		noteIndex[key] = append(noteIndex[key], nidx)
+		commentIndex[key] = append(commentIndex[key], cidx)
 
 	}
 
@@ -336,10 +354,10 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 				key = fmt.Sprintf(" %d_%d", formattedLine.bNum, formattedLine.aNum)
 			}
 
-			if noteIndicies, ok := noteIndex[key]; ok {
-				for _, nidx := range noteIndicies {
-					note := f.notes[nidx]
-					f.lineMap = append(f.lineMap, (nidx*NUM_FR_TYPES)+FRComment)
+			if commentIndicies, ok := commentIndex[key]; ok {
+				for _, cidx := range commentIndicies {
+					note := f.comments[cidx]
+					f.lineMap = append(f.lineMap, (cidx*NUM_FR_TYPES)+FRComment)
 					commentHeight := note.Height(vp)
 					for i := 1; i < commentHeight; i++ {
 						f.lineMap = append(f.lineMap, FRBlank)
@@ -352,7 +370,7 @@ func (f *FileRegion) updateLineMap(vp *ViewParams) {
 	}
 }
 
-func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote, width int) *FileRegion {
+func newFileRegion(ff *FormattedFile, change GLChangeData, comments []Comment, width int) *FileRegion {
 	region := FileRegion{
 		ff:        ff,
 		oldPath:   change.OldPath,
@@ -360,7 +378,7 @@ func newFileRegion(ff *FormattedFile, change GLChangeData, notes []GLNote, width
 		added:     change.NewFile,
 		removed:   change.DeletedFile,
 		collapsed: change.DeletedFile,
-		notes:     notes,
+		comments:  comments,
 	}
 
 	inNonAbr := ff.lines[0].mode != UNCHANGED

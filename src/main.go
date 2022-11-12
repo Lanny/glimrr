@@ -39,32 +39,6 @@ type ViewParams struct {
 	lineNoColWidth int
 }
 
-func (n *GLNote) Height(vp *ViewParams) int {
-	return gloss.Height(n.Render(vp, false))
-}
-
-func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
-	margin := vp.lineNoColWidth*2 + 2
-	bg := "#444"
-	borderColor := "#FFF"
-	if cursor {
-		bg = "#666"
-		borderColor = "#AF0"
-	}
-
-	block := gloss.NewStyle().
-		Background(gloss.Color(bg)).
-		Width(vp.width-margin-1).
-		MarginLeft(margin).
-		Padding(0, 2).
-		Border(gloss.NormalBorder(), false, false, false, true).
-		BorderForeground(gloss.Color(borderColor)).
-		BorderBackground(gloss.Color(bg)).
-		Render(n.Author.Name + ":\n" + n.Body)
-
-	return block
-}
-
 type VRegion interface {
 	Height() int
 	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
@@ -72,7 +46,7 @@ type VRegion interface {
 	View(startLine int, numLines int, cursor int, m *Model) string
 	GetNextCursorTarget(lineNo int, direction int) int
 	SetECState(value bool)
-	GetPendingNotes() []*GLNote
+	GetPendingComments() []Comment
 }
 
 type abridgement struct {
@@ -216,7 +190,8 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 					gl.Init()
 
 					for _, region := range m.regions {
-						for _, note := range region.GetPendingNotes() {
+						for _, comment := range region.GetPendingComments() {
+							note := comment.(*GLNote)
 							gl.CreateComment(*note, m.mr)
 						}
 					}
@@ -357,12 +332,12 @@ func (m Model) Init() tea.Cmd {
 			regions := make([]VRegion, len(mrData.Changes))
 
 			// Partion notes by file that they apply to
-			notesByFile := make(map[string]([]GLNote))
+			notesByFile := make(map[string]([]Comment))
 			for _, discussion := range mrData.Discussions {
 				for _, note := range discussion.Notes {
 					if note.Type == "DiffNote" {
 						path := note.Position.NewPath
-						notesByFile[path] = append(notesByFile[path], note)
+						notesByFile[path] = append(notesByFile[path], &note)
 					}
 				}
 			}
@@ -395,13 +370,13 @@ func (m Model) Init() tea.Cmd {
 							panic(err)
 						}
 
-						var notes []GLNote
+						var comments []Comment
 						var ok bool
-						if notes, ok = notesByFile[msg.change.NewPath]; !ok {
-							notes = nil
+						if comments, ok = notesByFile[msg.change.NewPath]; !ok {
+							comments = nil
 						}
 
-						regions[msg.idx] = newFileRegion(ff, msg.change, notes, m.w)
+						regions[msg.idx] = newFileRegion(ff, msg.change, comments, m.w)
 					}
 					wg.Done()
 				}()

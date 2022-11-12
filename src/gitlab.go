@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	gloss "github.com/charmbracelet/lipgloss"
 )
 
 type GLChangeData struct {
@@ -74,6 +75,45 @@ type GLMRData struct {
 type GLInstance struct {
 	apiUrl string
 	cache  map[string]([]byte)
+}
+
+func (n *GLNote) Height(vp *ViewParams) int {
+	return gloss.Height(n.Render(vp, false))
+}
+
+func (n *GLNote) IsPending() bool {
+	return n.Id < 0
+}
+
+func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
+	margin := vp.lineNoColWidth*2 + 2
+	bg := "#444"
+	borderColor := "#FFF"
+	if cursor {
+		bg = "#666"
+		borderColor = "#AF0"
+	}
+
+	block := gloss.NewStyle().
+		Background(gloss.Color(bg)).
+		Width(vp.width-margin-1).
+		MarginLeft(margin).
+		Padding(0, 2).
+		Border(gloss.NormalBorder(), false, false, false, true).
+		BorderForeground(gloss.Color(borderColor)).
+		BorderBackground(gloss.Color(bg)).
+		Render(n.Author.Name + ":\n" + n.Body)
+
+	return block
+}
+
+func (n *GLNote) GetPosition() CommentPosition {
+	return CommentPosition{
+		OldPath: n.Position.OldPath,
+		OldLine: n.Position.OldLine,
+		NewPath: n.Position.NewPath,
+		NewLine: n.Position.NewLine,
+	}
 }
 
 func (gl *GLInstance) get(url string) ([]byte, error) {
