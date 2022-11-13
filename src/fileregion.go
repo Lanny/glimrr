@@ -46,7 +46,7 @@ type FileRegion struct {
 	lineNoColWidth int
 }
 
-func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
+func (f *FileRegion) Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.Cmd) {
 	objIdx, objType := DivMod(f.lineMap[cursor], NUM_FR_TYPES)
 	vp := &ViewParams{
 		x:              0,
@@ -54,88 +54,102 @@ func (f *FileRegion) Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd {
 		lineNoColWidth: f.lineNoColWidth,
 	}
 
-	switch msg.String() {
-	case "enter":
-		if objType == FRAbr {
-			f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
-			f.updateLineMap(vp)
-		} else if objType == FRHeader {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			if objType == FRAbr {
+				f.abrs = append(f.abrs[:objIdx], f.abrs[objIdx+1:]...)
+				f.updateLineMap(vp)
+			} else if objType == FRHeader {
+				f.collapsed = !f.collapsed
+			}
+
+		case "t":
 			f.collapsed = !f.collapsed
+		case "d":
+			if objType != FRComment {
+				return m, nil
+			}
+
+			return m.doBlockingLoad("Deleting comment...", func() tea.Msg {
+				comment := f.comments[objIdx]
+				if !comment.IsPending() {
+					m.gl.DeleteComment(comment, m.mr)
+				}
+
+				f.comments = append(f.comments[:objIdx], f.comments[objIdx+1:]...)
+				f.updateLineMap(vp)
+
+				return nil
+			})
+
+		case "c":
+			if objType != FRLine {
+				return m, nil
+			}
+
+			tmpFile, err := os.CreateTemp("", "new-comment-*.md")
+			if err != nil {
+				panic("Unable to open file for creating a new comment.")
+			}
+
+			fname := tmpFile.Name()
+			defer os.Remove(fname)
+
+			m.p.ReleaseTerminal()
+
+			cmd := exec.Command("/usr/bin/vi", fname)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Run()
+
+			commentBody, err := os.ReadFile(fname)
+
+			if err != nil {
+				ln("Unable to read comment temp file!")
+				return m, nil
+			}
+			ln("Successfully collected comment:\n%s", commentBody)
+
+			line := f.ff.lines[objIdx]
+			var oldLineNo int
+			var newLineNo int
+
+			if line.mode != ADDED {
+				oldLineNo = line.aNum
+			}
+
+			if line.mode != REMOVED {
+				newLineNo = line.bNum
+			}
+
+			draftNote := GLNote{
+				Id:   -1,
+				Type: "DiffNote",
+				Body: string(commentBody),
+				Author: GLAuthor{
+					Id:       -1,
+					Name:     "(you)",
+					Username: "(you)",
+				},
+				Position: GLPosition{
+					PositionType: "text",
+					OldPath:      f.oldPath,
+					NewPath:      f.newPath,
+					OldLine:      oldLineNo,
+					NewLine:      newLineNo,
+				},
+			}
+			f.comments = append(f.comments, &draftNote)
+			f.updateLineMap(vp)
+
+			m.p.RestoreTerminal()
+			return m, nil
 		}
-
-	case "t":
-		f.collapsed = !f.collapsed
-	case "d":
-		if objType != FRComment {
-			return nil
-		}
-		//note := f.notes[objIdx]
-
-	case "c":
-		if objType != FRLine {
-			return nil
-		}
-
-		tmpFile, err := os.CreateTemp("", "new-comment-*.md")
-		if err != nil {
-			panic("Unable to open file for creating a new comment.")
-		}
-
-		fname := tmpFile.Name()
-		defer os.Remove(fname)
-
-		m.p.ReleaseTerminal()
-
-		cmd := exec.Command("/usr/bin/vi", fname)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Run()
-
-		commentBody, err := os.ReadFile(fname)
-
-		if err != nil {
-			ln("Unable to read comment temp file!")
-			return nil
-		}
-		ln("Successfully collected comment:\n%s", commentBody)
-
-		line := f.ff.lines[objIdx]
-		var oldLineNo int
-		var newLineNo int
-
-		if line.mode != ADDED {
-			oldLineNo = line.aNum
-		}
-
-		if line.mode != REMOVED {
-			newLineNo = line.bNum
-		}
-
-		draftNote := GLNote{
-			Id:   -1,
-			Type: "DiffNote",
-			Body: string(commentBody),
-			Author: GLAuthor{
-				Id:       -1,
-				Name:     "(you)",
-				Username: "(you)",
-			},
-			Position: GLPosition{
-				PositionType: "text",
-				OldPath:      f.oldPath,
-				NewPath:      f.newPath,
-				OldLine:      oldLineNo,
-				NewLine:      newLineNo,
-			},
-		}
-		f.comments = append(f.comments, &draftNote)
-		f.updateLineMap(vp)
-
-		m.p.RestoreTerminal()
-		return nil
 	}
 
-	return nil
+	return m, nil
 }
 
 func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) string {

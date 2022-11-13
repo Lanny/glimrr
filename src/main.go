@@ -31,6 +31,7 @@ type EndLoadingMsg struct{}
 type LoadMRMsg struct {
 	regions []VRegion
 	mr      GLMRData
+	gl      *GLInstance
 }
 
 type ViewParams struct {
@@ -41,7 +42,7 @@ type ViewParams struct {
 
 type VRegion interface {
 	Height() int
-	Update(m *Model, msg tea.KeyMsg, cursor int) tea.Cmd
+	Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.Cmd)
 	Resize(m *Model)
 	View(startLine int, numLines int, cursor int, m *Model) string
 	GetNextCursorTarget(lineNo int, direction int) int
@@ -62,6 +63,7 @@ type Model struct {
 	y           int
 	mode        int
 	loadingText string
+	gl          *GLInstance
 	mr          GLMRData
 	spinner     spinner.Model
 	exInput     textinput.Model
@@ -84,6 +86,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadingText = ""
 		m.regions = msg.regions
 		m.mr = msg.mr
+		m.gl = msg.gl
 		for _, region := range m.regions {
 			region.Resize(&m)
 		}
@@ -141,9 +144,11 @@ func (m Model) nUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = ExMode
 		default:
 			region, relCursor := m.getCursorTarget(m.cursor)
-			cmd := region.Update(&m, msg, relCursor)
-			return m, cmd
+			return region.Update(&m, msg, relCursor)
 		}
+	default:
+		region, relCursor := m.getCursorTarget(m.cursor)
+		return region.Update(&m, msg, relCursor)
 	}
 
 	return m, nil
@@ -180,21 +185,21 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if eCmd == "Load" {
-				return m.doBlockingLoad("Loading stuff...", func() {
+				return m.doBlockingLoad("Loading stuff...", func() tea.Msg {
 					time.Sleep(3 * time.Second)
+					return nil
 				})
 			}
 			if eCmd == "Submit" {
-				return m.doBlockingLoad("Submitting review...", func() {
-					gl := GLInstance{apiUrl: "https://gitlab.com/api"}
-					gl.Init()
-
+				return m.doBlockingLoad("Submitting review...", func() tea.Msg {
 					for _, region := range m.regions {
 						for _, comment := range region.GetPendingComments() {
 							note := comment.(*GLNote)
-							gl.CreateComment(*note, m.mr)
+							m.gl.CreateComment(*note, m.mr)
 						}
 					}
+
+					return nil
 				})
 			}
 		}
@@ -204,16 +209,16 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) doBlockingLoad(loadingMsg string, f func()) (tea.Model, tea.Cmd) {
+func (m Model) doBlockingLoad(loadingMsg string, f tea.Cmd) (tea.Model, tea.Cmd) {
 	m.spinner.Spinner = spinner.Dot
 	m.loadingText = loadingMsg
 
 	return m, tea.Batch(
 		m.spinner.Tick,
-		func() tea.Msg {
-			f()
-			return EndLoadingMsg{}
-		},
+		tea.Sequence(
+			f,
+			func() tea.Msg { return EndLoadingMsg{} },
+		),
 	)
 }
 
@@ -315,15 +320,15 @@ func (m Model) totalHeight() int {
 func (m Model) Init() tea.Cmd {
 	m.spinner.Spinner = spinner.Dot
 	m.loadingText = ""
-
 	return tea.Batch(
 		m.spinner.Tick,
 		func() tea.Msg {
+			gl := GLInstance{apiUrl: "https://gitlab.com/api"}
+			gl.Init()
+
 			pid := 39953668
 			mrid := 1
 
-			gl := GLInstance{apiUrl: "https://gitlab.com/api"}
-			gl.Init()
 			mrData, err := gl.FetchMR(pid, mrid)
 			if err != nil {
 				panic(err)
@@ -397,6 +402,7 @@ func (m Model) Init() tea.Cmd {
 			return LoadMRMsg{
 				regions: regions,
 				mr:      *mrData,
+				gl:      &gl,
 			}
 		},
 	)

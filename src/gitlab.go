@@ -44,17 +44,18 @@ type GLPosition struct {
 }
 
 type GLNote struct {
-	Id        int        `json:"id"`
-	Author    GLAuthor   `json:"author"`
-	Type      string     `json:"type"`
-	Body      string     `json:"body"`
-	CreatedAt string     `json:"created_at"`
-	UpdatedAt string     `json:"updated_at"`
-	Position  GLPosition `json:"position"`
+	Id           int        `json:"id"`
+	Author       GLAuthor   `json:"author"`
+	Type         string     `json:"type"`
+	Body         string     `json:"body"`
+	CreatedAt    string     `json:"created_at"`
+	UpdatedAt    string     `json:"updated_at"`
+	Position     GLPosition `json:"position"`
+	DiscussionId int
 }
 
 type GLDiscussion struct {
-	Id    string   `json:"id"`
+	Id    int      `json:"id"`
 	Notes []GLNote `json:"notes"`
 }
 
@@ -116,6 +117,20 @@ func (n *GLNote) GetPosition() CommentPosition {
 	}
 }
 
+func (gl *GLInstance) authdReq(method string, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("PRIVATE-TOKEN", os.Getenv("GLIMRR_TOKEN"))
+
+	return req, nil
+}
+
+func (gl *GLInstance) invalidateCache() {
+	os.Remove("glimrrCache.json")
+}
+
 func (gl *GLInstance) get(url string) ([]byte, error) {
 	client := &http.Client{}
 
@@ -125,11 +140,10 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 		return cachedVal, nil
 	} else {
 		jankLog("Not found in cache, requesting.\n")
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := gl.authdReq("GET", url, nil)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Add("PRIVATE-TOKEN", os.Getenv("GLIMRR_TOKEN"))
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
@@ -152,16 +166,41 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 	}
 }
 
-func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
+func (gl *GLInstance) del(url string) ([]byte, error) {
+	ln("DELETE req to URL: %s", url)
 	client := &http.Client{}
 
-	ln("Posting to URL: %s", url)
-	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+	req, err := gl.authdReq("DELETE", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("PRIVATE-TOKEN", os.Getenv("GLIMRR_TOKEN"))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		ln("Response body for DELETE request to %s:\n```\n%s\n```", url, string(body))
+		return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
+	}
+
+	return body, nil
+}
+
+func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
+	ln("POST req to URL: %s", url)
+	client := &http.Client{}
+
+	req, err := gl.authdReq("POST", url, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -210,6 +249,13 @@ func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
 	}
 	json.Unmarshal(body, &(parsedData.Discussions))
 
+	// Copy discussion IDs onto individual GLNotes
+	for _, discussion := range parsedData.Discussions {
+		for _, note := range discussion.Notes {
+			note.DiscussionId = discussion.Id
+		}
+	}
+
 	return &parsedData, nil
 }
 
@@ -251,10 +297,33 @@ func (gl *GLInstance) CreateComment(comment GLNote, mr GLMRData) (GLDiscussion, 
 		return discussion, err
 	}
 
+	gl.invalidateCache()
+
 	err = json.Unmarshal(body, &discussion)
 	if err != nil {
 		return discussion, err
 	}
 
 	return discussion, nil
+}
+
+func (gl *GLInstance) DeleteComment(comment Comment, mr GLMRData) error {
+	note := comment.(*GLNote)
+	ln(gl.apiUrl)
+	url := fmt.Sprintf(
+		"%s/v4/projects/%d/merge_requests/%d/discussions/%d/notes/%d",
+		strings.TrimSuffix(gl.apiUrl, "/"),
+		mr.ProjectId,
+		mr.Iid,
+		note.DiscussionId,
+		note.Id,
+	)
+
+	_, err := gl.del(url)
+	if err != nil {
+		return err
+	}
+
+	gl.invalidateCache()
+	return nil
 }
