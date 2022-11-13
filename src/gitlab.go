@@ -127,7 +127,8 @@ func (gl *GLInstance) authdReq(method string, url string, body io.Reader) (*http
 	return req, nil
 }
 
-func (gl *GLInstance) invalidateCache() {
+func (gl *GLInstance) InvalidateCache() {
+	gl.cache = make(map[string]([]byte))
 	os.Remove("glimrrCache.json")
 }
 
@@ -297,8 +298,6 @@ func (gl *GLInstance) CreateComment(comment GLNote, mr GLMRData) (GLDiscussion, 
 		return discussion, err
 	}
 
-	gl.invalidateCache()
-
 	err = json.Unmarshal(body, &discussion)
 	if err != nil {
 		return discussion, err
@@ -324,6 +323,5 @@ func (gl *GLInstance) DeleteComment(comment Comment, mr GLMRData) error {
 		return err
 	}
 
-	gl.invalidateCache()
 	return nil
 }

@@ -198,6 +198,7 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.gl.CreateComment(*note, m.mr)
 						}
 					}
+					m.gl.InvalidateCache()
 
 					return nil
 				})

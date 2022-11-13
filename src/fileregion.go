@@ -76,6 +76,7 @@ func (f *FileRegion) Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.C
 				comment := f.comments[objIdx]
 				if !comment.IsPending() {
 					m.gl.DeleteComment(comment, m.mr)
+					m.gl.InvalidateCache()
 				}
 
 				f.comments = append(f.comments[:objIdx], f.comments[objIdx+1:]...)
