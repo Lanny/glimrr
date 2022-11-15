@@ -178,10 +178,15 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 		modeString = " [DELETED]"
 	}
 
+	headerBg := gloss.Color("#b9c902")
+	if cursor == 0 {
+		headerBg = gloss.Color("#ebfc2b")
+	}
+
 	// Render the file header
 	view[0] = gloss.NewStyle().
 		Width(m.w).
-		Background(gloss.Color("#b9c902")).
+		Background(headerBg).
 		Foreground(gloss.Color("#000")).
 		Render(fmt.Sprintf(" %s %s%s", ecSymbol, f.newPath, modeString))
 
