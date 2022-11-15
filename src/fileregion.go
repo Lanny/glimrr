@@ -215,6 +215,10 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 			comment := f.comments[objIdx]
 			blockLines := strings.Split(comment.Render(vp, isCursor), "\n")
 			for _, line := range blockLines {
+				if i >= numLines {
+					// Don't append past the end of the view buffer
+					break
+				}
 				view[i] = line
 				i++
 			}
