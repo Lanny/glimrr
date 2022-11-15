@@ -95,15 +95,23 @@ func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 		borderColor = "#AF0"
 	}
 
+	width := vp.width-margin-1
+	text := fmt.Sprintf(
+		"%s\n%s\n%s\n",
+		gloss.NewStyle().Bold(true).Render(n.Author.Name),
+		gloss.NewStyle().Foreground(gloss.Color("#AAA")).Render(strings.Repeat("―", len(n.Author.Name))),
+		n.Body,
+	)
+
 	block := gloss.NewStyle().
 		Background(gloss.Color(bg)).
-		Width(vp.width-margin-1).
+		Width(width).
 		MarginLeft(margin).
-		Padding(0, 2).
+		Padding(0, 1).
 		Border(gloss.NormalBorder(), false, false, false, true).
 		BorderForeground(gloss.Color(borderColor)).
 		BorderBackground(gloss.Color(bg)).
-		Render(n.Author.Name + ":\n" + n.Body)
+		Render(text)
 
 	return block
 }
