@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"regexp"
 )
 
 var bgColorMap = [...]string{
@@ -61,6 +62,13 @@ type StatusMessage struct {
 	msg string
 }
 
+type ModelInitData struct {
+	glHost  string
+	project string
+	mrid    string
+
+}
+
 type Model struct {
 	cursor      int
 	w           int
@@ -69,6 +77,7 @@ type Model struct {
 	y           int
 	mode        int
 	loadingText string
+	initData    ModelInitData
 	gl          *GLInstance
 	mr          GLMRData
 	spinner     spinner.Model
@@ -489,6 +498,7 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.Disabled)
 	}
 
+
 	log.Debug().Msg("Glimmr starting...")
 
 	homeDir, err := os.UserHomeDir()
@@ -508,6 +518,19 @@ func main() {
 		w:           80,
 	}
 	model.spinner.Spinner = spinner.Dot
+
+    // https://gitlab.com/lan.rogers.book/glimrr/-/merge_requests/1
+	mrUrlRegex := regexp.MustCompile(`(?P<host>https?://[^/?#]+)/(?P<project>.*)/-/merge_requests/(?P<mrid>[0-9]+)`)
+	matches := mrUrlRegex.FindStringSubmatch(os.Args[1])
+
+	log.Debug().Msg(fmt.Sprintf("Arg parse result: %+v", matches))
+
+	model.initData = ModelInitData{
+		glHost: matches[0],
+		project: matches[1],
+		mrid: matches[2],
+	}
+
 
 	// This doesn't feel great, but we need to call program methods from the
 	// model so *shrug*
