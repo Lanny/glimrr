@@ -2,15 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	gloss "github.com/charmbracelet/lipgloss"
 	"os"
 	"strings"
 	"math/rand"
 	"sync"
 	"time"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	gloss "github.com/charmbracelet/lipgloss"
+    "github.com/rs/zerolog"
+    "github.com/rs/zerolog/log"
 )
 
 var bgColorMap = [...]string{
@@ -271,7 +273,10 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m Model) View() string {
-	ln("h: %d, w: %d", m.h, m.w)
+	log.Trace().
+		Int("width", m.w).
+		Int("height", m.h).
+		Msg("Rendering...")
 	background := CFG.Colors.Background
 
 	if m.loadingText != "" {
@@ -463,18 +468,37 @@ type CreateFileRegionMsg struct {
 	change GLChangeData
 }
 
+//var logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
+
 func main() {
-	jankLog("\n\n====== NEW RUN ======\n\n")
+	logLevels := map[string]zerolog.Level{
+		"PANIC": zerolog.PanicLevel,
+		"FATAL": zerolog.FatalLevel,
+		"ERROR": zerolog.ErrorLevel,
+		"WARN": zerolog.WarnLevel,
+		"INFO": zerolog.InfoLevel,
+		"DEBUG": zerolog.DebugLevel,
+		"TRACE": zerolog.TraceLevel,
+	}
+
+	if logLevel, ok := logLevels[os.Getenv("LOG_LEVEL")]; ok {
+		zerolog.SetGlobalLevel(logLevel)
+		logfile, _ := os.OpenFile("glimrr.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: logfile})
+	} else {
+		zerolog.SetGlobalLevel(zerolog.Disabled)
+	}
+
+    log.Debug().Msg("Glimmr starting...")
 
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		configPath := fmt.Sprintf("%s/.config/glimrr/config.json", homeDir)
+		log.Debug().Msg(fmt.Sprintf("Attempting to read config from %s", configPath))
 		userConfig, err := loadConfigFromFile(configPath)
+		CFG = userConfig
 		if err != nil {
-			CFG = userConfig
-			ln("Unable to load user config, using defaults.")
-		} else {
-			CFG = userConfig
+			log.Info().Msg("Unable to load user config, using defaults.")
 		}
 	}
 
@@ -491,8 +515,9 @@ func main() {
 	program := tea.NewProgram(mp)
 	mp.p = program
 
+    log.Debug().Msg("Handing control of console over to tea.")
 	if err := program.Start(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
+		log.Error().Err(err).Msg("")
 		os.Exit(1)
 	}
 }

@@ -11,7 +11,7 @@ To allow glimrr to access and modify merge requests, set the `GLIMRR_TOKEN` envi
 To build and run:
 
 ```
-go build -o glimrr ./src && ./glimrr
+go build -o glimrr ./src && LOG_LEVEL=DEBUG ./glimrr
 ```
 
 For an auto-reloading dev setup, run:
