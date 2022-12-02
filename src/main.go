@@ -8,6 +8,7 @@ import (
 	gloss "github.com/charmbracelet/lipgloss"
 	"os"
 	"strings"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -28,6 +29,9 @@ const (
 )
 
 type EndLoadingMsg struct{}
+type ClearStatusMessageMsg struct{
+	 msgId int
+}
 type LoadMRMsg struct {
 	regions []VRegion
 	mr      GLMRData
@@ -50,9 +54,9 @@ type VRegion interface {
 	GetPendingComments() []Comment
 }
 
-type abridgement struct {
-	start int
-	end   int
+type StatusMessage struct {
+	id   int
+	msg  string
 }
 
 type Model struct {
@@ -68,6 +72,7 @@ type Model struct {
 	spinner     spinner.Model
 	exInput     textinput.Model
 	regions     []VRegion
+	messages    []StatusMessage
 	p           *tea.Program
 }
 
@@ -80,8 +85,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.h = msg.Height
 		m.exInput.Width = msg.Width
 	case EndLoadingMsg:
-		ln("%v", msg)
 		m.loadingText = ""
+	case ClearStatusMessageMsg:
+		removeIndex := -1
+		for idx, message := range m.messages {
+			if message.id == msg.msgId {
+				removeIndex = idx
+				break
+			}
+		}
+		if removeIndex >= 0 {
+			m.messages = append(m.messages[:removeIndex], m.messages[removeIndex+1:]...)
+		}
+		return m, nil
 	case LoadMRMsg:
 		m.loadingText = ""
 		m.regions = msg.regions
@@ -203,6 +219,11 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return nil
 				})
 			}
+
+			return m.displayStatusMessage(
+				"ERR: Unrecognized command.",
+				3 * time.Second,
+			)
 		}
 	}
 
@@ -221,6 +242,22 @@ func (m Model) doBlockingLoad(loadingMsg string, f tea.Cmd) (tea.Model, tea.Cmd)
 			func() tea.Msg { return EndLoadingMsg{} },
 		),
 	)
+}
+
+func (m Model) displayStatusMessage(body string, clearAfter time.Duration) (tea.Model, tea.Cmd) {
+	msg := StatusMessage{
+		id:  rand.Intn(65535),
+		msg: body,
+	}
+
+	if len(m.messages) > 0 {
+		msg.id = m.messages[len(m.messages) - 1].id + 1
+	}
+	m.messages = append(m.messages, msg)
+
+	return m, tea.Tick(clearAfter, func(_ time.Time) tea.Msg {
+		return ClearStatusMessageMsg{ msgId: msg.id }
+	})
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -257,6 +294,8 @@ func (m Model) View() string {
 		tH -= 1
 	}
 
+	tH -= len(m.messages)
+
 	for _, region := range m.regions {
 		rH := region.Height()
 
@@ -280,6 +319,14 @@ func (m Model) View() string {
 
 		parts = append(parts, region.View(startLine, linesToRender, cursor, &m))
 		cumY += rH
+	}
+
+	msgStyle := gloss.NewStyle().
+		MaxWidth(m.w).
+		MaxHeight(1)
+
+	for _, msg := range m.messages {
+		parts = append(parts, msgStyle.Render(msg.msg))
 	}
 
 	if m.mode == ExMode {

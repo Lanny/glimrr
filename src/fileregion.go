@@ -33,6 +33,11 @@ type Comment interface {
 	GetPosition() CommentPosition
 }
 
+type abridgement struct {
+	start int
+	end   int
+}
+
 type FileRegion struct {
 	ff *FormattedFile
 	oldPath string
