@@ -3,12 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	gloss "github.com/charmbracelet/lipgloss"
+	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	gloss "github.com/charmbracelet/lipgloss"
 )
 
 type GLChangeData struct {
@@ -95,7 +96,7 @@ func (n *GLNote) Render(vp *ViewParams, cursor bool) string {
 		borderColor = "#AF0"
 	}
 
-	width := vp.width-margin-1
+	width := vp.width - margin - 1
 	text := fmt.Sprintf(
 		"%s\n%s\n%s\n",
 		gloss.NewStyle().Bold(true).Render(n.Author.Name),
@@ -143,27 +144,34 @@ func (gl *GLInstance) InvalidateCache() {
 func (gl *GLInstance) get(url string) ([]byte, error) {
 	client := &http.Client{}
 
-	jankLog(fmt.Sprintf("Requesting URL: %s\n", url))
+	log.Debug().Str("url", url).Str("method", "GET").Msg("HTTP request...")
 	if cachedVal, present := gl.cache[url]; present {
-		jankLog("Found in cache.\n")
+		log.Debug().Str("url", url).Str("method", "GET").Msg("Cache hit")
 		return cachedVal, nil
 	} else {
-		jankLog("Not found in cache, requesting.\n")
+		log.Debug().Str("url", url).Str("method", "GET").Msg("Cache miss, requesting...")
 		req, err := gl.authdReq("GET", url, nil)
 		if err != nil {
+			log.Error().Str("url", url).Str("method", "GET").Msg("Error building request.")
 			return nil, err
 		}
 		resp, err := client.Do(req)
 		if err != nil {
+			log.Error().Str("url", url).Str("method", "GET").Msg("Error conducting request.")
 			return nil, err
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Error().Str("url", url).Str("method", "GET").Msg("Error reading response body.")
 			return nil, err
 		}
 		if resp.StatusCode != 200 {
-			ln("Response body for GET request to %s:\n```\n%s\n```", url, string(body))
+			log.Error().
+				Str("url", url).
+				Str("method", "GET").
+				Int("code", resp.StatusCode).
+				Msg("Non-200 status code when executing request.")
 			return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
 		}
 
@@ -176,7 +184,7 @@ func (gl *GLInstance) get(url string) ([]byte, error) {
 }
 
 func (gl *GLInstance) del(url string) ([]byte, error) {
-	ln("DELETE req to URL: %s", url)
+	log.Debug().Str("url", url).Str("method", "DELETE").Msg("HTTP request...")
 	client := &http.Client{}
 
 	req, err := gl.authdReq("DELETE", url, nil)
@@ -194,7 +202,11 @@ func (gl *GLInstance) del(url string) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
-		ln("Response body for DELETE request to %s:\n```\n%s\n```", url, string(body))
+		log.Error().
+			Str("url", url).
+			Str("method", "DELETE").
+			Int("code", resp.StatusCode).
+			Msg("Non-200 status code when executing request.")
 		return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
 	}
 
@@ -202,7 +214,7 @@ func (gl *GLInstance) del(url string) ([]byte, error) {
 }
 
 func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
-	ln("POST req to URL: %s", url)
+	log.Debug().Str("url", url).Str("method", "POST").Msg("HTTP request...")
 	client := &http.Client{}
 
 	req, err := gl.authdReq("POST", url, strings.NewReader(form.Encode()))
@@ -221,7 +233,11 @@ func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
-		ln("Response body for POST request to %s:\n```\n%s\n```", url, string(body))
+		log.Error().
+			Str("url", url).
+			Str("method", "POST").
+			Int("code", resp.StatusCode).
+			Msg("Non-200 status code when executing request.")
 		return nil, fmt.Errorf("Request to %s failed with status code %d", url, resp.StatusCode)
 	}
 
@@ -231,11 +247,12 @@ func (gl *GLInstance) postForm(url string, form url.Values) ([]byte, error) {
 func (gl *GLInstance) Init() {
 	seralizedCache, err := os.ReadFile("glimrrCache.json")
 	if err != nil {
-		ln("Unable to restore cache, creating empty.")
-		ln("Error: %s", err.Error())
+		log.Error().
+			Err(err).
+			Msg("Unable to restore Gitlab cache!")
 		gl.cache = make(map[string]([]byte))
 	} else {
-		jankLog("Restoring cache from file.\n")
+		log.Debug().Msg("Restoring cache from file.")
 		json.Unmarshal(seralizedCache, &gl.cache)
 	}
 }
@@ -316,7 +333,6 @@ func (gl *GLInstance) CreateComment(comment GLNote, mr GLMRData) (GLDiscussion, 
 
 func (gl *GLInstance) DeleteComment(comment Comment, mr GLMRData) error {
 	note := comment.(*GLNote)
-	ln(gl.apiUrl)
 	url := fmt.Sprintf(
 		"%s/v4/projects/%d/merge_requests/%d/discussions/%d/notes/%d",
 		strings.TrimSuffix(gl.apiUrl, "/"),

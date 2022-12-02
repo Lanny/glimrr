@@ -4,6 +4,7 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
+	"github.com/rs/zerolog/log"
 	"os"
 	"os/exec"
 	"strings"
@@ -39,12 +40,12 @@ type abridgement struct {
 }
 
 type FileRegion struct {
-	ff *FormattedFile
-	oldPath string
-	newPath string
-	added   bool
-	removed bool
-	collapsed bool
+	ff             *FormattedFile
+	oldPath        string
+	newPath        string
+	added          bool
+	removed        bool
+	collapsed      bool
 	lineMap        []int
 	abrs           []abridgement
 	comments       []Comment
@@ -95,28 +96,39 @@ func (f *FileRegion) Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.C
 				return m, nil
 			}
 
+			log.Debug().Msg("Creating temp file for comment")
 			tmpFile, err := os.CreateTemp("", "new-comment-*.md")
 			if err != nil {
+				log.Fatal().
+					Err(err).
+					Msg("Unable to open file for creating a new comment.")
 				panic("Unable to open file for creating a new comment.")
 			}
 
 			fname := tmpFile.Name()
 			defer os.Remove(fname)
 
+			log.Debug().Msg("Assuming control of terminal from tea")
 			m.p.ReleaseTerminal()
 
+			log.Debug().Msg("Invoking editor")
 			cmd := exec.Command("/usr/bin/vi", fname)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Run()
 
+			log.Debug().Msg("Control returned from editor process, reading result")
 			commentBody, err := os.ReadFile(fname)
 
 			if err != nil {
-				ln("Unable to read comment temp file!")
+				log.Error().
+					Err(err).
+					Msg("Unable to read comment temp file!")
 				return m, nil
 			}
-			ln("Successfully collected comment:\n%s", commentBody)
+			log.Debug().
+				Str("body", string(commentBody)).
+				Msg("Successfully collected comment.")
 
 			line := f.ff.lines[objIdx]
 			var oldLineNo int
@@ -150,6 +162,7 @@ func (f *FileRegion) Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.C
 			f.comments = append(f.comments, &draftNote)
 			f.updateLineMap(vp)
 
+			log.Debug().Msg("Restoring control of terminal to tea")
 			m.p.RestoreTerminal()
 			return m, nil
 		}

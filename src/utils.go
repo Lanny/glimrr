@@ -1,10 +1,7 @@
 package main
 
 import (
-	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"math"
-	"os"
 )
 
 func Min(x, y int) int {
@@ -46,19 +43,4 @@ func GetLineNoColWidth(ff *FormattedFile) int {
 
 func DivMod(numerator int, denominator int) (q int, r int) {
 	return numerator / denominator, numerator % denominator
-}
-
-func jankLog(msg string) {
-	f, err := tea.LogToFile("debug.log", "debug")
-	if err != nil {
-		fmt.Println("fatal:", err)
-		os.Exit(1)
-	}
-	f.WriteString(msg)
-	defer f.Close()
-}
-
-func ln(msg string, rest ...any) {
-	formatted := fmt.Sprintf(msg, rest...)
-	jankLog(formatted + "\n")
 }

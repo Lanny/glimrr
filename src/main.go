@@ -2,17 +2,17 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strings"
-	"math/rand"
-	"sync"
-	"time"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	gloss "github.com/charmbracelet/lipgloss"
-    "github.com/rs/zerolog"
-    "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"math/rand"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
 
 var bgColorMap = [...]string{
@@ -31,8 +31,8 @@ const (
 )
 
 type EndLoadingMsg struct{}
-type ClearStatusMessageMsg struct{
-	 msgId int
+type ClearStatusMessageMsg struct {
+	msgId int
 }
 type LoadMRMsg struct {
 	regions []VRegion
@@ -57,8 +57,8 @@ type VRegion interface {
 }
 
 type StatusMessage struct {
-	id   int
-	msg  string
+	id  int
+	msg string
 }
 
 type Model struct {
@@ -224,7 +224,7 @@ func (m Model) eUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m.displayStatusMessage(
 				"ERR: Unrecognized command.",
-				3 * time.Second,
+				3*time.Second,
 			)
 		}
 	}
@@ -253,12 +253,12 @@ func (m Model) displayStatusMessage(body string, clearAfter time.Duration) (tea.
 	}
 
 	if len(m.messages) > 0 {
-		msg.id = m.messages[len(m.messages) - 1].id + 1
+		msg.id = m.messages[len(m.messages)-1].id + 1
 	}
 	m.messages = append(m.messages, msg)
 
 	return m, tea.Tick(clearAfter, func(_ time.Time) tea.Msg {
-		return ClearStatusMessageMsg{ msgId: msg.id }
+		return ClearStatusMessageMsg{msgId: msg.id}
 	})
 }
 
@@ -475,8 +475,8 @@ func main() {
 		"PANIC": zerolog.PanicLevel,
 		"FATAL": zerolog.FatalLevel,
 		"ERROR": zerolog.ErrorLevel,
-		"WARN": zerolog.WarnLevel,
-		"INFO": zerolog.InfoLevel,
+		"WARN":  zerolog.WarnLevel,
+		"INFO":  zerolog.InfoLevel,
 		"DEBUG": zerolog.DebugLevel,
 		"TRACE": zerolog.TraceLevel,
 	}
@@ -489,7 +489,7 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.Disabled)
 	}
 
-    log.Debug().Msg("Glimmr starting...")
+	log.Debug().Msg("Glimmr starting...")
 
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
@@ -515,9 +515,9 @@ func main() {
 	program := tea.NewProgram(mp)
 	mp.p = program
 
-    log.Debug().Msg("Handing control of console over to tea.")
+	log.Debug().Msg("Handing control of console over to tea.")
 	if err := program.Start(); err != nil {
-		log.Error().Err(err).Msg("")
+		log.Fatal().Err(err).Msg("")
 		os.Exit(1)
 	}
 }
