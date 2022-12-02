@@ -111,8 +111,13 @@ func (f *FileRegion) Update(m *Model, msg tea.Msg, cursor int) (tea.Model, tea.C
 			log.Debug().Msg("Assuming control of terminal from tea")
 			m.p.ReleaseTerminal()
 
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = "vi"
+			}
+
 			log.Debug().Msg("Invoking editor")
-			cmd := exec.Command("/usr/bin/vi", fname)
+			cmd := exec.Command(editor, fname)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Run()
