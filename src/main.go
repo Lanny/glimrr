@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"regexp"
+	"strconv"
 )
 
 var bgColorMap = [...]string{
@@ -65,7 +66,7 @@ type StatusMessage struct {
 type ModelInitData struct {
 	glHost  string
 	project string
-	mrid    string
+	mrid    int
 
 }
 
@@ -385,13 +386,10 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		func() tea.Msg {
-			gl := GLInstance{apiUrl: "https://gitlab.com/api"}
+			gl := GLInstance{apiUrl: fmt.Sprintf("%s/api", m.initData.glHost)}
 			gl.Init()
 
-			pid := 39953668
-			mrid := 1
-
-			mrData, err := gl.FetchMR(pid, mrid)
+			mrData, err := gl.FetchMR(m.initData.project, m.initData.mrid)
 			if err != nil {
 				panic(err)
 			}
@@ -408,8 +406,8 @@ func (m Model) Init() tea.Cmd {
 					}
 				}
 			}
-
 			var wg sync.WaitGroup
+
 			q := make(chan CreateFileRegionMsg, 8)
 
 			for i := 0; i < 4; i++ {
@@ -453,7 +451,7 @@ func (m Model) Init() tea.Cmd {
 			for idx, change := range mrData.Changes {
 				q <- CreateFileRegionMsg{
 					idx:    idx,
-					pid:    pid,
+					pid:    m.initData.project,
 					change: change,
 					ref:    mrData.DiffRefs.BaseSHA,
 				}
@@ -472,7 +470,7 @@ func (m Model) Init() tea.Cmd {
 
 type CreateFileRegionMsg struct {
 	idx    int
-	pid    int
+	pid    string
 	ref    string
 	change GLChangeData
 }
@@ -529,15 +527,17 @@ func main() {
 	matches := mrUrlRegex.FindStringSubmatch(os.Args[1])
 
 	log.Debug().Msg(fmt.Sprintf("Arg parse result: %+v", matches))
-	if len(matches) < 3 {
+	if len(matches) < 4 {
 		fmt.Fprintln(os.Stderr, "unable to parse url.")
 		os.Exit(2)
 	}
 
+	// Should not be possible to fail.
+	mrid, _ := strconv.Atoi(matches[3])
 	model.initData = ModelInitData{
-		glHost: matches[0],
-		project: matches[1],
-		mrid: matches[2],
+		glHost: matches[1],
+		project: matches[2],
+		mrid: mrid,
 	}
 
 

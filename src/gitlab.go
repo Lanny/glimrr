@@ -257,19 +257,19 @@ func (gl *GLInstance) Init() {
 	}
 }
 
-func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
+func (gl *GLInstance) FetchMR(pid string, mrid int) (*GLMRData, error) {
 	var parsedData GLMRData
 
-	url := fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/changes", strings.TrimSuffix(gl.apiUrl, "/"), pid, mrid)
-	body, err := gl.get(url)
+	apiUrl := fmt.Sprintf("%s/v4/projects/%s/merge_requests/%d/changes", strings.TrimSuffix(gl.apiUrl, "/"), url.QueryEscape(pid), mrid)
+	body, err := gl.get(apiUrl)
 	if err != nil {
 		return nil, err
 	}
 
 	json.Unmarshal(body, &parsedData)
 
-	url = fmt.Sprintf("%s/v4/projects/%d/merge_requests/%d/discussions", strings.TrimSuffix(gl.apiUrl, "/"), pid, mrid)
-	body, err = gl.get(url)
+	apiUrl = fmt.Sprintf("%s/v4/projects/%s/merge_requests/%d/discussions", strings.TrimSuffix(gl.apiUrl, "/"), url.QueryEscape(pid), mrid)
+	body, err = gl.get(apiUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -285,8 +285,8 @@ func (gl *GLInstance) FetchMR(pid int, mrid int) (*GLMRData, error) {
 	return &parsedData, nil
 }
 
-func (gl *GLInstance) FetchFileContents(pid int, path string, ref string) (*string, error) {
-	url := fmt.Sprintf("%s/v4/projects/%d/repository/files/%s/raw?ref=%s", strings.TrimSuffix(gl.apiUrl, "/"), pid, url.QueryEscape(path), url.QueryEscape(ref))
+func (gl *GLInstance) FetchFileContents(pid string, path string, ref string) (*string, error) {
+	url := fmt.Sprintf("%s/v4/projects/%s/repository/files/%s/raw?ref=%s", strings.TrimSuffix(gl.apiUrl, "/"), url.QueryEscape(pid), url.QueryEscape(path), url.QueryEscape(ref))
 	body, err := gl.get(url)
 	if err != nil {
 		return nil, err
