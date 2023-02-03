@@ -519,16 +519,20 @@ func main() {
 	}
 	model.spinner.Spinner = spinner.Dot
 
-    // https://gitlab.com/lan.rogers.book/glimrr/-/merge_requests/1
 	mrUrlRegex := regexp.MustCompile(`(?P<host>https?://[^/?#]+)/(?P<project>.*)/-/merge_requests/(?P<mrid>[0-9]+)`)
 
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "glimrr must be invoked with at least one argument.")
 		os.Exit(2)
 	}
+
 	matches := mrUrlRegex.FindStringSubmatch(os.Args[1])
 
 	log.Debug().Msg(fmt.Sprintf("Arg parse result: %+v", matches))
+	if len(matches) < 3 {
+		fmt.Fprintln(os.Stderr, "unable to parse url.")
+		os.Exit(2)
+	}
 
 	model.initData = ModelInitData{
 		glHost: matches[0],
