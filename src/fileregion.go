@@ -236,6 +236,11 @@ func (f *FileRegion) View(startLine int, numLines int, cursor int, m *Model) str
 				Render("...")
 		} else if objType == FRComment {
 			comment := f.comments[objIdx]
+
+			if isCursor {
+				log.Trace().Msg(fmt.Sprintf("Highlighted comment. Obj idx: %d. Comment: %#v", objIdx, comment))
+			}
+
 			blockLines := strings.Split(comment.Render(vp, isCursor), "\n")
 			for _, line := range blockLines {
 				if i >= numLines {

@@ -400,6 +400,7 @@ func (m Model) Init() tea.Cmd {
 			notesByFile := make(map[string]([]Comment))
 			for _, discussion := range mrData.Discussions {
 				for _, note := range discussion.Notes {
+					note := note
 					if note.Type == "DiffNote" {
 						path := note.Position.NewPath
 						notesByFile[path] = append(notesByFile[path], &note)
