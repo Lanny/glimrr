@@ -10,11 +10,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"math/rand"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"regexp"
-	"strconv"
 )
 
 var bgColorMap = [...]string{
@@ -67,7 +67,6 @@ type ModelInitData struct {
 	glHost  string
 	project string
 	mrid    int
-
 }
 
 type Model struct {
@@ -497,7 +496,6 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.Disabled)
 	}
 
-
 	log.Debug().Msg("Glimmr starting...")
 
 	homeDir, err := os.UserHomeDir()
@@ -536,11 +534,10 @@ func main() {
 	// Should not be possible to fail.
 	mrid, _ := strconv.Atoi(matches[3])
 	model.initData = ModelInitData{
-		glHost: matches[1],
+		glHost:  matches[1],
 		project: matches[2],
-		mrid: mrid,
+		mrid:    mrid,
 	}
-
 
 	// This doesn't feel great, but we need to call program methods from the
 	// model so *shrug*
